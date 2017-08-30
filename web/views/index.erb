@@ -1,0 +1,16 @@
+<h1>Topics</h1>
+
+<table id="topics" class="display" cellspacing="0" width="100%">
+	<tr>
+  	<th>Name</th>
+    <th>Num articles</th>
+  </tr>
+
+  <% topics.each do |topic| %>
+  <tr>
+    <td><a href="/topic/<%= topic['topic_id'] %>"><%= topic['topic_name'] %></a></td>
+    <td>0</td>
+  </tr>
+  <% end %>
+
+</table>

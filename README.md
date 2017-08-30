@@ -24,7 +24,9 @@ I, [2017-08-30T11:12:51.645017 #24756]  INFO -- : EventKey: b8304989c784f6ad39d9
 Now grab an article:
 
 ```
-# rake grab:article["b8304989c784f6ad39d9ef42aae1de92485dd515, http://www.huffingtonpost.com/entry/joel-osteen-lakewood-church-houston-harvey_us_59a6ac7fe4b084581a148cef?section=us_us-news"]
+rake grab:article["b8304989c784f6ad39d9ef42aae1de92485dd515, http://www.huffingtonpost.com/entry/joel-osteen-lakewood-church-houston-harvey_us_59a6ac7fe4b084581a148cef?section=us_us-news"]
+rake grab:article["b8304989c784f6ad39d9ef42aae1de92485dd515, http://www.breitbart.com/texas/2017/08/28/joel-osteens-lakewood-church-closes-doors-displaced-harvey-victims/"]
+rake grab:article["b8304989c784f6ad39d9ef42aae1de92485dd515, http://www.cnn.com/2017/08/29/us/joel-osteen-houston-megachurch-criticism/index.html"]
 ```
 
 ```

@@ -1,0 +1,14 @@
+---
+version: '2'
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - /home/krogebry/.aws:/root/.aws
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - PORT=8080

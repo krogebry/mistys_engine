@@ -1,0 +1,21 @@
+
+<h1><%= topic['topic_name'] %></h1>
+
+<table id="topics" class="display" cellspacing="0" width="100%">
+  <tr>
+    <th>Title</th>
+    <th>Source</th>
+    <th>Link</th>
+    <th>Numlines in body</th>
+  </tr>
+
+  <% articles.each do |article| %>
+  <tr>
+    <td><a href="/article/<%= article['article_id'] %>"><%= article['article']['title'] %></a></td>
+    <td><%= article['source'] %></td>
+    <td><a href="<%= article['url'] %>" target="_new">Link</a></td>
+    <td><%= article['article']['body'].size %></td>
+  </tr>
+  <% end %>
+
+</table>

@@ -1,6 +1,7 @@
 require 'pp'
 require 'json'
 require 'logger'
+require 'aws-sdk'
 require 'net/http'
 require 'nokogiri'
 require 'fileutils'
@@ -11,10 +12,18 @@ require './libs/cache.rb'
 Log = Logger.new(STDOUT)
 Cache = DevOps::Cache.new
 
-desc "Create an article event key"
+desc 'Create an article event key'
 task :mk_event_key, :event_name do |t,args|
-  event_key = Digest::SHA1.hexdigest( args[:event_name] )
-  Log.info('EventKey: %s' % event_key)
+  creds = Aws::SharedCredentials.new()
+  d_client = Aws::DynamoDB::Client.new(credentials: creds)
+
+  d_client.put_item({
+    item: {
+      topic_id: Digest::SHA1.hexdigest( args[:event_name] ),
+      topic_name: args[:event_name]
+    },
+    table_name: 'misty_dev_topics'
+  })
 end
 
 def get_article_file( article_event_key, url_cache_key )
@@ -32,7 +41,6 @@ namespace :grab do
     Log.debug('URL: %s' % args[:url]) 
 
     uri = URI( args[:url] )
-    #pp uri.host
 
     cache_key = Digest::SHA1.hexdigest( args[:url] )
     data = Cache.cached( cache_key ) do
@@ -45,7 +53,8 @@ namespace :grab do
     h['url'] = args[:url]
     h['source'] = uri.host
     h['article'] = Hash.new()
-    h['article_key'] = args[:key]
+    h['topic_id'] = args[:key]
+    h['article_id'] = cache_key
 
     case uri.host
     when 'www.cnn.com'
@@ -66,13 +75,23 @@ namespace :grab do
     f.puts h.to_json
     f.close
 
+    Log.debug('File: %s' % f.path)
+
+    creds = Aws::SharedCredentials.new()
+    d_client = Aws::DynamoDB::Client.new(credentials: creds)
+
+    d_client.put_item({
+      item: h,
+      table_name: 'misty_dev_articles'
+    })
+
   end
 end
 
 def proc_huffpo( page, h )
   paragraphs = []
   title = page.css('//h1[@class=headline__title]').children.first.text
-  h['title'] = title
+  h['article']['title'] = title
 
   sub_title = page.css('//h2[@class=headline__subtitle]').children.first.text
   paragraphs.push sub_title
@@ -80,27 +99,28 @@ def proc_huffpo( page, h )
   find = page.css("div[class*='text']/p")
   paragraphs.push( find.map{|f| f.children.first.text } ).flatten!
 
-  h['body'] = paragraphs.join
+  h['article']['body'] = paragraphs.compact
 end
 
 def proc_breitbart( page, h )
   paragraphs = []
   title = page.css('//header/h1').children.first.text
-  h['title'] = title
+  h['article']['title'] = title
 
   find = page.css('//div[@class=entry-content]/h2')
   paragraphs.push find.children.first.text
 
   find = page.css('//div[@class=entry-content]/p')
-  paragraphs.push( find.map{|f| f.children.first.text } ).flatten!
+  paragraphs.push( find.map{|f| f.children.first.text }.select{|t| t != '' }).flatten!
 
-  h['body'] = paragraphs.join
+  h['article']['body'] = paragraphs.compact
 end
 
 def proc_cnn( page, h )
   paragraphs = []
 
   title = page.css('h1[class=pg-headline]').children.first.text
+  h['article']['title'] = title
 
   ## First paragraph.
   find = page.xpath("//p[@class='zn-body__paragraph speakable']")
@@ -114,6 +134,5 @@ def proc_cnn( page, h )
   find = page.xpath("//div[@class='zn-body__paragraph']")
   paragraphs.push( find.map{|f| f.children.first.text } ).flatten!
 
-  h['article']['title'] = title
-  h['article']['body'] = paragraphs.join()
+  h['article']['body'] = paragraphs.compact
 end

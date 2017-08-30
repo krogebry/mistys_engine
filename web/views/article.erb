@@ -1,0 +1,21 @@
+
+<h1><%= article['article']['title'] %></h1>
+
+<table id="topics" class="display" cellspacing="0" width="100%">
+  <tr>
+    <th>Line</th>
+    <th>Actions</th>
+  </tr>
+
+  <% article['article']['body'].each do |line| %>
+  <tr>
+    <td><%= line %></td>
+    <td><ul>
+      <li>Emote1</li>
+      <li>Emote2</li>
+      <li>Emote3</li>
+    </ul></td>
+  </tr>
+  <% end %>
+
+</table>

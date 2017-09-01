@@ -1,21 +1,50 @@
+<style> 
+#header td{
+  width: 25%;
+  text-align: center; 
+  background-color: #efefef;
+}
+
+.article_line{
+  border: 1px solid #efefef;
+  padding: 10px;
+}
+
+.article_line_summary{
+  display: none;
+}
+</style>
+
+<script type="text/javascript">
+$(document).ready(function(){
+  $(".article_line").click(function(e){
+    // console.log($(this).find(".article_line_summary"));
+    $(this).find(".article_line_summary").toggle();
+  });
+});
+</script>
 
 <h1><%= article['article']['title'] %></h1>
 
-<table id="topics" class="display" cellspacing="0" width="100%">
-  <tr>
-    <th>Line</th>
-    <th>Actions</th>
-  </tr>
-
-  <% article['article']['body'].each do |line| %>
-  <tr>
-    <td><%= line %></td>
-    <td><ul>
-      <li>Emote1</li>
-      <li>Emote2</li>
-      <li>Emote3</li>
-    </ul></td>
-  </tr>
-  <% end %>
-
+<table id="header" class="display" cellspacing="0" width="100%">
+<tr>
+  <td><%= article['source'] %></td>
+  <td><%= article['article']['authors'].join( ' and ' ) if article['article'].has_key?( 'authors' ) %></td>
+  <td><%= Time.at(article['article']['update_time'].to_f).strftime( "%D %T" ) %></td>
+  <td>Filler</td>
+</tr>
 </table>
+
+<% article['article']['body'].each do |line| %>
+<div class="article_line">
+  <%= line['body'] %>
+  <div class="article_line_summary">
+  <table width="100%">
+    <tr>
+      <td><%= line['sentiment']['score'].to_f if line.has_key?( 'sentiment' ) %></td>
+      <td><%= line['sentiment']['magnitude'].to_f if line.has_key?( 'sentiment' ) %></td>
+    </tr>
+  </table>
+  </div>
+</div>
+<% end %>

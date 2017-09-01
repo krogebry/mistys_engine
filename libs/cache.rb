@@ -29,7 +29,7 @@ module DevOps
       if File.exists?(fs_cache_file)
         data = File.read(fs_cache_file)
       else
-        Log.debug('Getting from source')
+        Log.debug('Getting from source'.yellow)
         data = yield
         File.open(fs_cache_file, 'w') do |f|
           f.puts data
@@ -44,13 +44,18 @@ module DevOps
       if File.exists?(fs_cache_file)
         data = File.read(fs_cache_file)
       else
-        Log.debug('Getting from source')
+        Log.debug('Getting from source'.yellow)
         data = yield
         File.open(fs_cache_file, 'w') do |f|
           f.puts data
         end
       end
-      JSON.parse(data)
+
+      begin
+        JSON.parse(data)
+      rescue JSON::ParserError => e
+        return {}
+      end
     end
 
   end

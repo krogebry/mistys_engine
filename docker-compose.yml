@@ -10,5 +10,7 @@ services:
     volumes:
       - /home/krogebry/.aws:/root/.aws
     environment:
-      - AWS_DEFAULT_REGION=us-east-1
       - PORT=8080
+      - USE_AWS_CREDS=true
+      - MISTY_ENV_NAME=dev
+      - AWS_DEFAULT_REGION=us-east-1

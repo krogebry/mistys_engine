@@ -1,21 +1,85 @@
+<style>
+.info_summary {
+  display: none;
+}
+
+#topics {
+  border: 1px solid #efefef;
+}
+  #topics tr th{
+    color: #efefef;
+    text-align: left;
+    background-color: #000044;
+  }
+
+  #topics tr td{
+  }
+
+  #topics tr{
+    background-color: #efefef;
+  }
+</style>
+
+<script type="text/javascript">
+$(document).ready(function(){
+  $(".more_info").click(function( e ){
+    $("#article_"+ $(this).attr( "article_id" )).toggle({
+      duration: 550
+    });
+  });
+});
+</script>
 
 <h1><%= topic['topic_name'] %></h1>
 
+<a href="/topic/add_source?topic_id=<%= topic['topic_id'] %>">Add source article</a>
+
 <table id="topics" class="display" cellspacing="0" width="100%">
   <tr>
+    <th>Info</th>
     <th>Title</th>
     <th>Source</th>
     <th>Link</th>
-    <th>Numlines in body</th>
+    <th>Score</th>
+    <th>Magnitude</th>
   </tr>
 
   <% articles.each do |article| %>
+  <% next if !article['article'].has_key?( 'body' ) %>
   <tr>
+    <td><p class="more_info" article_id="<%= article['article_id'] %>">Summary</p></td>
     <td><a href="/article/<%= article['article_id'] %>"><%= article['article']['title'] %></a></td>
     <td><%= article['source'] %></td>
     <td><a href="<%= article['url'] %>" target="_new">Link</a></td>
-    <td><%= article['article']['body'].size %></td>
+    <td><%= "%.3f" % article['score'].to_f %></td>
+    <td><%= "%.3f" % article['magnitude'].to_f %></td>
+
+  </tr> <tr id="article_<%= article['article_id'] %>" class="info_summary">
+    <td colspan="6" style="vertical-align: top;">
+    <table style="width: 100%;">
+    <tr>
+      <% if topic.has_key?( 'summary' ) && topic['summary'].has_key?( article['article_id'] ) %>
+      <% topic['summary'][article['article_id']]['mr'].each do |context, info| %>
+      <td style="vertical-align: top; width: 20%;">
+        <h4><%= context %></h4>
+        <% info.sort_by{|k,v| v['pct'].to_f }.reverse.to_h.each do |name, c_info| %>
+        <table style="width: 100%;">
+        <tr>
+          <td style="width: 50%;"><%= name %></td>
+          <td><%= c_info['cnt'].to_f %></td>
+          <td><%= "%.2f" % c_info['pct'].to_f %>%</td>
+        </tr>
+        </table>
+        <% end %>
+      </td>
+      <% end %>
+      <% end ## if article_id%>
+    </tr>
+    </table>
+    </td>
   </tr>
   <% end %>
 
 </table>
+
+

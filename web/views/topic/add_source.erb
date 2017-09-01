@@ -1,0 +1,17 @@
+<h1>Create source for topic</h1>
+
+<div>
+Add a URL from a relavant topic to be scrapped later.
+</div>
+
+<form method="post" action="/topic/add_source">
+<input type="hidden" name="topic_id" value="<%= topic_id %>" />
+<table>
+<tr>
+  <td>URL</td>
+  <td><input type="text" name="url" /></td>
+</tr>
+</table>
+
+<input type="submit" />
+</form>

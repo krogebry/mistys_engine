@@ -22,7 +22,7 @@ module Misty
       })
     end
 
-    def self.get_article_analysis( article_id, digest )
+    def self.get_article_analysis( article_id, digest, force=false )
       line_id = format('%s-%s', article_id, digest)
       query = {
         index_name: 'article_id_digest-index',
@@ -32,8 +32,10 @@ module Misty
         }, 
         key_condition_expression: 'article_id_digest = :v1' 
       }
-      # pp query
       cache_key = format('misty_dev_article_analysis_%s', line_id)
+
+      Cache.del_key( cache_key ) if force == true
+
       data = Cache.cached_json( cache_key ) do
         DynamoClient.query( query ).data.to_h.to_json
       end
@@ -47,7 +49,24 @@ module Misty
       })
     end
 
-    def self.get_topic_by_id( topic_id )
+    def self.get_topics( force=false )
+      query = {
+        table_name: format('misty_%s_topics', ENV['MISTY_ENV_NAME'])
+      }
+      cache_key = format('topics_%s', ENV['MISTY_ENV_NAME'])
+      Cache.del_key( cache_key ) if force == true
+      data = Cache.cached_json( cache_key ) do
+        DynamoClient.scan( query ).data.to_h.to_json
+      end
+
+      topics = []
+      data['items'].each do |item|
+        topics.push(Misty::Topic.new( item ))
+      end
+      topics
+    end
+
+    def self.get_topic_by_id( topic_id, force=false )
       query = {
         index_name: 'topic_id-index',
         table_name: 'misty_dev_topics',
@@ -57,29 +76,32 @@ module Misty
         key_condition_expression: 'topic_id = :v1'
       }
       cache_key = 'topics_dev_%s' % topic_id
+      Cache.del_key( cache_key ) if force == true
       data = Cache.cached_json( cache_key ) do
         DynamoClient.query( query ).data.to_h.to_json
       end
-      data['items'].first
+      Misty::Topic.new( data['items'].first )
     end
 
-    def self.get_article_by_id( article_id )
+    def self.get_article_by_id( article_id, force=false )
       query = {
-        #index_name: 'article_id-index',
         table_name: 'misty_dev_articles',
         expression_attribute_values: {
           ':v1' => article_id
         }, 
         key_condition_expression: 'article_id = :v1'
       }
+
       cache_key = 'article_dev_%s' % article_id
+      Cache.del_key( cache_key ) if force == true
+
       data = Cache.cached_json( cache_key ) do
         DynamoClient.query( query ).data.to_h.to_json
       end
       data['items'].first
     end
 
-    def self.get_articles_by_topic_id( topic_id )
+    def self.get_articles_by_topic_id( topic_id, force=false )
       query = {
         limit: 200,
         index_name: 'topic_id-index',
@@ -91,8 +113,10 @@ module Misty
       }
 
       cache_key = 'articles_dev_%s' % topic_id
+      Cache.del_key( cache_key ) if force == true
 
-      Cache.cached_json( cache_key ) do
+      articles = []
+      data = Cache.cached_json( cache_key ) do
         ptr = DynamoClient.query( query )
         data = { 'items' => ptr.data.items }
         has_more_data = (ptr['last_evaluated_key'] == nil ? false : true)
@@ -107,6 +131,10 @@ module Misty
         data.to_json
       end
 
+      data['items'].each do |item|
+        articles.push(Misty::Article.new( item ))
+      end
+      articles
     end
 
   end

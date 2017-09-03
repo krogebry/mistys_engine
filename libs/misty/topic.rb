@@ -4,21 +4,41 @@ module Misty
 
   class Topic
     @topic
-    @articles
     @topic_id
+    @topic_name
 
-    def initialize( topic_id )
-      @topic_id = topic_id
-      @topic = Dyn::get_topic_by_id( @topic_id )
+    @scrape_url
+
+    attr_accessor :topic_id, :topic_name, :scrape_url
+    def initialize( data )
+      @topic = data
+      @topic_id = data['topic_id']
+      @topic_name = data['topic_name']
+
+      @scrape_url = data['scrape_url'] if data.has_key?( 'scrape_url' )
     end
 
-    def get_articles
-      @articles = Dyn::get_articles_by_topic_id( @topic_id )
+    def get_articles( force=false )
+      Dyn::get_articles_by_topic_id( @topic_id, force )
+    end
+
+    def has_summary?
+      @topic.has_key?( 'summary' )
+    end
+
+    def get_summary
+      @topic['summary']
+    end
+
+    def has_summary_for_article?( article_id )
+      get_summary().has_key?( article_id )
+    end
+
+    def get_summary_for_article( article_id )
+      get_summary()[article_id]
     end
 
     def summarize
-      get_articles
-
       totals = {
         :mr => {},
         :score => 0.0,
@@ -27,21 +47,22 @@ module Misty
 
       article_summaries = {}
 
-      @articles['items'].each do |article|
+      get_articles.each do |article|
         article_totals = {
           :mr => {},
           :score => 0.0,
           :magnitude => 0.0
         }
 
-        next if !article['article'].has_key?( 'body' )
+        next if !article.has_body?
+        Log.debug(format('Processing: %s', article.article_id))
 
-        Log.debug(format('Processing: %s', article['article_id']))
-
-        article['article']['body'].each do |body|
+        article.get_body.each do |body|
           digest = Digest::SHA1.hexdigest( body['body'] )
-          analysis = Dyn::get_article_analysis( article['article_id'], digest )
-          next if !analysis.has_key?( 'entities' ) || !analysis['entities'].has_key?( 'entities' )
+          analysis = Dyn::get_article_analysis( article.article_id, digest )
+
+          next if analysis == nil || !analysis.has_key?( 'entities' ) || !analysis['entities'].has_key?( 'entities' )
+
           analysis['entities']['entities'].each do |e|
             mention_type = e['mentions'].first['type']
             next if mention_type != 'PROPER'
@@ -56,7 +77,7 @@ module Misty
           end
         end
 
-        article_summaries[article['article_id']] = article_totals
+        article_summaries[article.article_id] = article_totals
       end
 
       map = {}
@@ -85,10 +106,8 @@ module Misty
     end
 
     def save
-      # pp @topic
       Dyn::save_topic( @topic )
-      Log.debug('Sleeping on topic save')
-      sleep rand(10)
+      Misty::nap( 'topic save' )
     end
 
   end

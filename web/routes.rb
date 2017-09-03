@@ -31,14 +31,13 @@ post "/topic/create" do
   DynamoClient.put_item({
     item: {
       topic_id: Digest::SHA1.hexdigest( params['topic_name'] ),
+      scrape_url: params['scrape_url'],
       topic_name: params['topic_name']
     },
     table_name: 'misty_dev_topics'
   })
-
-	Cache.del_key 'topics_%' % ENV['MISTY_ENV_NAME']
-
-  { 'success' => true }.to_json
+	Cache.del_key 'topics_%s' % ENV['MISTY_ENV_NAME']
+  redirect "/"
 end
 
 post "/topic/add_source" do
@@ -57,16 +56,21 @@ post "/topic/add_source" do
 		Log.fatal('Unable to queue message: %s', e)
 
 	end
-
-  #{ 'success' => true }.to_json
 	redirect '/'
 end
 
 get "/topic/:topic_id" do
   topic = Misty::Dyn::get_topic_by_id( params[:topic_id] )
-	articles = Misty::Dyn::get_articles_by_topic_id( params[:topic_id] )
+  articles = topic.get_articles
+  pp topic.get_summary
+  erb :topic, :locals => { :topic => topic, :articles => articles }
+end
 
-  erb :topic, :locals => { :topic => topic, :articles => articles['items'] }
+get "/topic/:topic_id/refresh" do
+  topic = Misty::Dyn::get_topic_by_id( params[:topic_id], true )
+	articles = Misty::Dyn::get_articles_by_topic_id( params[:topic_id], true )
+  pp articles
+  { :success => true }.to_json
 end
 
 get "/article/:article_id" do
@@ -74,3 +78,7 @@ get "/article/:article_id" do
   erb :article, :locals => { :article => article }
 end
 
+get "/article/:article_id/refresh" do
+  article = Misty::Dyn::get_article_by_id( params[:article_id], true )
+  { :success => true }.to_json
+end

@@ -22,17 +22,39 @@
 
 <script type="text/javascript">
 $(document).ready(function(){
+  $("#topics tr.data:even").css("background-color", "#efefef");
+  $("#topics tr.data:odd").css("background-color", "#bfbfbf");
+
+  $("#topics tr.data").hover(function(){
+    $(this).css("background", "#aaa");
+  },function(){
+    $(this).css("background", "");
+  });
+
   $(".more_info").click(function( e ){
     $("#article_"+ $(this).attr( "article_id" )).toggle({
       duration: 550
     });
   });
+
+  $("#force_refresh").click(function(){
+    $.ajax({
+      url: "/topic/<%= topic.topic_id %>/refresh",
+      success: function(){
+        window.location = window.location
+      }
+    })
+  });
 });
 </script>
 
-<h1><%= topic['topic_name'] %></h1>
+<h1><%= topic.topic_name %></h1>
 
-<a href="/topic/add_source?topic_id=<%= topic['topic_id'] %>">Add source article</a>
+<div>
+  <a href="/topic/add_source?topic_id=<%= topic.topic_id %>">Add source article</a>
+  | <span id="force_refresh">Force refresh</span>
+  | <span><a href="/">Home</a></span>
+</div>
 
 <table id="topics" class="display" cellspacing="0" width="100%">
   <tr>
@@ -45,21 +67,22 @@ $(document).ready(function(){
   </tr>
 
   <% articles.each do |article| %>
-  <% next if !article['article'].has_key?( 'body' ) %>
-  <tr>
-    <td><p class="more_info" article_id="<%= article['article_id'] %>">Summary</p></td>
-    <td><a href="/article/<%= article['article_id'] %>"><%= article['article']['title'] %></a></td>
-    <td><%= article['source'] %></td>
-    <td><a href="<%= article['url'] %>" target="_new">Link</a></td>
-    <td><%= "%.3f" % article['score'].to_f %></td>
-    <td><%= "%.3f" % article['magnitude'].to_f %></td>
+  <% next if !article.has_body? %>
+  <tr class="data">
+    <td><p class="more_info" article_id="<%= article.article_id %>">Summary</p></td>
+    <td><a href="/article/<%= article.article_id %>"><%= article.data['article']['title'] %></a></td>
+    <td><%= article.source %></td>
+    <td><a href="<%= article.url %>" target="_new">Link</a></td>
+    <td><%= "%.3f" % article.score.to_f %></td>
+    <td><%= "%.3f" % article.magnitude.to_f %></td>
 
-  </tr> <tr id="article_<%= article['article_id'] %>" class="info_summary">
+  </tr> <tr id="article_<%= article.article_id %>" class="info_summary">
     <td colspan="6" style="vertical-align: top;">
     <table style="width: 100%;">
     <tr>
-      <% if topic.has_key?( 'summary' ) && topic['summary'].has_key?( article['article_id'] ) %>
-      <% topic['summary'][article['article_id']]['mr'].each do |context, info| %>
+      <% if topic.has_summary? && topic.has_summary_for_article?( article.article_id ) %>
+      <% summary = topic.get_summary_for_article( article.article_id ) %>
+      <% summary['mr'].each do |context, info| %>
       <td style="vertical-align: top; width: 20%;">
         <h4><%= context %></h4>
         <% info.sort_by{|k,v| v['pct'].to_f }.reverse.to_h.each do |name, c_info| %>
@@ -73,7 +96,7 @@ $(document).ready(function(){
         <% end %>
       </td>
       <% end %>
-      <% end ## if article_id%>
+      <% end %>
     </tr>
     </table>
     </td>
@@ -81,5 +104,4 @@ $(document).ready(function(){
   <% end %>
 
 </table>
-
 

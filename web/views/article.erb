@@ -18,13 +18,26 @@
 <script type="text/javascript">
 $(document).ready(function(){
   $(".article_line").click(function(e){
-    // console.log($(this).find(".article_line_summary"));
     $(this).find(".article_line_summary").toggle();
   });
+
+  $("#force_refresh").click(function(){
+    $.ajax({
+      url: "/article/<%= article['article_id'] %>/refresh",
+      success: function(){
+        window.location = window.location
+      }
+    })
+  });
+
 });
 </script>
 
 <h1><%= article['article']['title'] %></h1>
+
+<div>
+  <span id="force_refresh">Refresh</span>
+</div>
 
 <table id="header" class="display" cellspacing="0" width="100%">
 <tr>

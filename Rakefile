@@ -99,12 +99,14 @@ namespace :topics do
   task :scrape do |t,args|
     topics = Misty::Dyn::get_topics
     topics.each do |topic|
+      next if topic.topic_id == 'ca0b186cee4df7782b6555e0904ff80385336cca'
+
 			url = topic.scrape_url
       next if url == nil
 
     	cache_key = format('url_%s', Digest::SHA1.hexdigest( url ))
     	data = Cache.cached( cache_key ) do
-      	r = RestClient.get( args[:url] )
+      	r = RestClient.get( url )
       	r.body
     	end
     	page = Nokogiri::HTML( data )

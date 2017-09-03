@@ -62,14 +62,14 @@ end
 get "/topic/:topic_id" do
   topic = Misty::Dyn::get_topic_by_id( params[:topic_id] )
   articles = topic.get_articles
-  pp topic.get_summary
+  # pp topic.get_summary
   erb :topic, :locals => { :topic => topic, :articles => articles }
 end
 
 get "/topic/:topic_id/refresh" do
   topic = Misty::Dyn::get_topic_by_id( params[:topic_id], true )
 	articles = Misty::Dyn::get_articles_by_topic_id( params[:topic_id], true )
-  pp articles
+  # pp articles
   { :success => true }.to_json
 end
 

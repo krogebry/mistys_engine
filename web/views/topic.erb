@@ -56,6 +56,18 @@ $(document).ready(function(){
   | <span><a href="/">Home</a></span>
 </div>
 
+<% if subject_importance_map != nil && subject_importance_map['map'] != nil %>
+<h2>subject_importance_map</h2>
+<% subject_importance_map['map'].each do |subject, info| %>
+<div>
+  <span><%= subject %> ( <%= '%.2f' % info['salience'] %> ): </span>
+  <% info['mention_map'].sort_by{|k,v| v['cnt'].to_f }.reverse.to_h.each do |k,v| %>
+    <span><%= k %> (<%= '%.2f' % v['cnt'] %> )</span>
+  <% end %>
+</div>
+<% end %>
+<% end %>
+
 <table id="topics" class="display" cellspacing="0" width="100%">
   <tr>
     <th>Info</th>

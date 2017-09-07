@@ -1,0 +1,18 @@
+<h1>Analysis for <%= analysis['digest'] %></h1>
+
+<% analysis['syntax']['tokens']. each do |token| %>
+  <span><%= token['text']['content'] %></span>
+<% end %>
+
+<hr/>
+
+<% analysis['syntax']['tokens']. each do |token| %>
+  <span><%= token['lemma'] %></span>
+<% end %>
+
+<% analysis['entities']['entities']. each do |entity| %>
+<div>
+  <span><%= entity['name'] %></span>
+  <span><%= entity['salience'] %></span>
+</div>
+<% end %>

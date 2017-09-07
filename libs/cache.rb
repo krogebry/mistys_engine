@@ -38,6 +38,13 @@ module DevOps
       data
     end
 
+    def set(key, data)
+      fs_cache_file = File.join(FS_CACHE_DIR, key)
+      File.open(fs_cache_file, 'w') do |f|
+        f.puts data
+      end
+    end
+
     def cached_json(key)
       fs_cache_file = File.join(FS_CACHE_DIR, key)
       FileUtils.mkdir_p(File.dirname(fs_cache_file)) unless File.exists?(File.dirname(fs_cache_file))

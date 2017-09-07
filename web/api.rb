@@ -31,11 +31,15 @@ end
 begin
   if ENV['USE_AWS_CREDS'] == true
     creds = Aws::SharedCredentials.new()
+    S3Client = Aws::S3::Client.new(credentials: creds)
     SQSClient = Aws::SQS::Client.new(credentials: creds)
     DynamoClient = Aws::DynamoDB::Client.new(credentials: creds)
+
   else
+    S3Client = Aws::S3::Client.new()
     SQSClient = Aws::SQS::Client.new()
     DynamoClient = Aws::DynamoDB::Client.new()
+
   end
 
 rescue => e

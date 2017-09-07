@@ -1,4 +1,4 @@
-VERSION="0.1.0"
+VERSION="0.3.2"
 
 docker_image: 
 	docker build -t misty:${VERSION} .

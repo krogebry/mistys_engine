@@ -23,7 +23,7 @@ $(document).ready(function(){
 
   $("#force_refresh").click(function(){
     $.ajax({
-      url: "/article/<%= article['article_id'] %>/refresh",
+      url: "/article/<%= article.article_id %>/refresh",
       success: function(){
         window.location = window.location
       }
@@ -33,7 +33,7 @@ $(document).ready(function(){
 });
 </script>
 
-<h1><%= article['article']['title'] %></h1>
+<h1><%= article.data['article']['title'] %></h1>
 
 <div>
   <span id="force_refresh">Refresh</span>
@@ -41,23 +41,38 @@ $(document).ready(function(){
 
 <table id="header" class="display" cellspacing="0" width="100%">
 <tr>
-  <td><%= article['source'] %></td>
-  <td><%= article['article']['authors'].join( ' and ' ) if article['article'].has_key?( 'authors' ) %></td>
-  <td><%= Time.at(article['article']['update_time'].to_f).strftime( "%D %T" ) %></td>
+  <td><%= article.source %></td>
+  <td><%= article.data['article']['authors'].join( ' and ' ) if article.data['article'].has_key?( 'authors' ) %></td>
+  <td><%= Time.at(article.data['article']['update_time'].to_f).strftime( "%D %T" ) %></td>
   <td>Filler</td>
 </tr>
 </table>
 
-<% article['article']['body'].each do |line| %>
+<% article.get_body.each do |line| %>
 <div class="article_line">
   <%= line['body'] %>
+  <% if false %>
   <div class="article_line_summary">
   <table width="100%">
     <tr>
+      <td><a href="/article/<%= article.article_id %>/line/<%= line['digest'] %>">Analysis</a></td>
       <td><%= line['sentiment']['score'].to_f if line.has_key?( 'sentiment' ) %></td>
       <td><%= line['sentiment']['magnitude'].to_f if line.has_key?( 'sentiment' ) %></td>
     </tr>
   </table>
   </div>
+  <% end %>
 </div>
 <% end %>
+
+<table>
+<% summary_analysis['entities'].map{|e| e.merge({ 'salience' => e['salience'].to_f })}.sort{|a,b| b['salience'].to_f <=> a['salience'].to_f }.each do |e| %>
+<tr>
+  <td><%= e['name'] %></td>
+  <td><%= e['salience'] %></td>
+  <td><%= e['mentions'].size %></td>
+</tr>
+<% end %>
+</table>
+
+

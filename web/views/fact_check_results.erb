@@ -1,0 +1,8 @@
+
+<h1>Fact checker</h1>
+
+<% results.each do |article| %>
+<div>
+  <a href="/article/<%= article.article_id %>"><%= article.get_title %></a>
+</div>
+<% end %>

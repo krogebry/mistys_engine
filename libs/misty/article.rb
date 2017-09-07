@@ -18,25 +18,29 @@ module Misty
     attr_accessor :article_id, :source, :magnitude, :score, :article, :data, :url
     #def initialize( topic_id, url )
     def initialize( data=nil )
-      if data != nil
-        self.load( data )
-      end
+      self.load( data )
+    end
+
+    def self.get_by_url( url )
+      article_id = Digest::SHA1.hexdigest( url ) 
+      Dyn::get_article_by_id( article_id, false )
     end
 
     def load( data )
-      if data.class == Hash
-        @data = data
-      else
-        @data = Misty::Dyn::get_article_by_id( data )
-      end
+      # Log.debug('Loading article')
+      @data = data
 
       if @data == nil ## nothing to load
         @data = { 'article' => {} }
-        return nil
+        return true
       end
 
-      @url = @data['url'] if @data.has_key?('url')
-      @uri = URI( @data['url'] ) if @data['url'] != nil
+      @url = @data['url'] 
+      if !@data.has_key?( 'url' ) || @url == nil
+        Log.fatal(format('Unable to find url for article: %s', @data['article_id']).red)
+        exit
+      end
+      @uri = URI( @url )
 
       @source = @data['source'] if @data.has_key?('source')
       @data_id = @data['data_id'] if @data.has_key?('data_id')
@@ -52,6 +56,15 @@ module Misty
       @data['article']['body']
     end
 
+    def get_entire_body
+      str = get_body.map{|b| b['body'] }.join( ' ' )
+      str.gsub!( /\t/, '' )
+      str.gsub!( /\r\n/, '')
+      str.gsub!( /#{[0x201D].pack("U")}/, '"' )
+      str.gsub!( /#{[0x201C].pack("U")}/, '"' )
+      str
+    end
+
     def has_body?
       @data['article'].has_key?( 'body' )
     end
@@ -62,6 +75,10 @@ module Misty
 
     def get_summary
       @data['summary']
+    end
+
+    def get_title
+      @data['article']['title']
     end
 
     def get_headers
@@ -80,11 +97,27 @@ module Misty
           #r = RestClient.get( url, :headers => headers, :verify_ssl => false )
           r = RestClient::Request.execute(method: :get, url: url, headers: headers, verify_ssl: false)
           r.body
+
+        rescue RestClient::NotFound => e
+          Log.fatal('Failed to get page'.red)
+          nil
+
+        rescue RestClient::ServiceUnavailable => e
+          Log.fatal('Failed to get page'.red)
+          nil
+
         rescue RestClient::RangeNotSatisfiable => e
           Log.fatal('Failed to get page'.red)
+          nil
+
         end
       end
-      Nokogiri::HTML( data )
+
+      if data != nil
+        return Nokogiri::HTML( data )
+      else
+        return nil
+      end
     end
 
     def get_article_file( topic_key, article_key)
@@ -102,6 +135,8 @@ module Misty
         'magnitude' => @magnitude,
         'article_id' => @article_id
       }
+      #pp doc
+      #exit
       doc['article'] = @data['article'] if @data.has_key?( 'article' )
 
       f = get_article_file( @topic_id, @article_id )
@@ -110,10 +145,10 @@ module Misty
 
       if write_to_dyn == true
         Dyn::save_article( doc )
-        Misty::nap( 'article save' )
+        #Misty::nap( 'article save' )
 
-        Dyn::get_article_by_id( @article_id, true )
-        Misty::nap( 'refreshing cache for article' )
+        # Dyn::get_article_by_id( @article_id, true )
+        # Misty::nap( 'refreshing cache for article' )
       end
     end
 
@@ -130,10 +165,15 @@ module Misty
     def handle_elements( type, elements )
       case type
       when 'body'
-        @data['article']['body'] = elements.map{|el| { 
-          'body' => el.text,
-          'digest' => Digest::SHA1.hexdigest( el.text )
-        } if el.text != "" && el.text != " "}.compact
+        @data['article']['body'] ||= []
+
+        ## populate only if the body is currently empty.
+        if @data['article']['body'].size == 0
+          @data['article']['body'] = elements.map{|el| { 
+            'body' => el.text,
+            'digest' => Digest::SHA1.hexdigest( el.text )
+          } if el.text != "" && el.text != " "}.compact
+        end
 
       when 'title'
         @data['article']['title'] = elements.first.text
@@ -179,7 +219,10 @@ module Misty
         ts = Time.at( elements.first.attributes['rel'].value.to_f )
 
       elsif elements.first.name == 'meta'
-        ts = Time.parse( elements.first.attributes['content'] )
+        begin
+          ts = Time.parse( elements.first.attributes['content'] )
+        rescue => e
+        end
 
       else
         begin
@@ -195,21 +238,19 @@ module Misty
     end
 
     def process_page( url, topic_id=nil )
-      @uri = URI( url )
       @url = url
-
+      @uri = URI( url ) if @uri == nil
       return false if BROKEN_SITES.include?( @uri.host )
 
-      @topic_id = topic_id if topic_id != nil
-      @article_id = Digest::SHA1.hexdigest( url ) 
+      @topic_id = topic_id if @topic_id == nil
+      @article_id = Digest::SHA1.hexdigest( url ) if @article_id == nil ## loading for the first time
 
-      self.load( @article_id )
       Log.debug(format('Processing page article_id: %s | topic_id: %s', @article_id, @topic_id))
 
       xml = get_page( url )
-      # return nil if Misty::SOURCES_MAP[@uri.host].has_key?( 'disabled' ) && Misty::SOURCES_MAP[@uri.host]['disabled'] == true
+      return false if xml == nil
 
-      if Misty::SOURCES_MAP.has_key?( @uri.host )
+      if Misty::SOURCES_MAP.has_key?( @uri.host ) 
         m = Misty::SOURCES_MAP[@uri.host]
         return false if m['disabled'] == true
 
@@ -235,7 +276,7 @@ module Misty
 
           end
         else
-          Log.fatal(format('Unable to find generator').red)
+          Log.fatal(format('Unable to find generator').blue)
           return false
 
         end
@@ -272,9 +313,10 @@ module Misty
       return true
     end
 
-		def analyze( topic, line )
+		def analyze( topic, line, force=false )
       # Log.debug(format('Running analisis for %s', line))
   		cache_key = format('ml_%s_%s', topic, Digest::SHA1.hexdigest( line ))
+      Cache.del_key( cache_key ) if force == true
   		Cache.cached_json( cache_key ) do
     		encoded = line.to_ascii.gsub( /"/, "'" )
     		cmd_ml = format('gcloud ml language analyze-%s --content="%s"', topic, encoded)
@@ -290,24 +332,73 @@ module Misty
   		end
 		end
 
+    def get_summary_analysis( force=false )
+      Dyn::get_article_analysis( @article_id, 'ALL_SUMMARY', force )
+    end
+
     def analyze_language( force=false )
       return false if !has_body?
 
-      Log.debug(format('Running language analyisis on %s', @article_id))
+      Log.debug(format('Running language analyisis on article: %s', @article_id))
 
-      get_body.each do |body_el|
+      summary_analysis = get_summary_analysis
+      #Log.debug('Force: %s' % force )
+      summary_analysis = nil if force == true
+
+      digest = 'ALL_SUMMARY'
+      summary_analysis = {
+        'digest' => digest,
+        'article_id' => @article_id,
+        'article_id_digest' => format( '%s-%s', @article_id, digest )
+      } if summary_analysis == nil
+
+      save_doc = false
+      save_summary = false
+
+      if !summary_analysis.has_key?( 'entities' ) || summary_analysis['entities'].size == 0
+        Log.debug(format('Running entities analysis').yellow)
+        summary_analysis['entities'] = analyze_body_entities['entities']
+        save_summary = true
+      end
+
+      if !summary_analysis.has_key?( 'sentiment' )
+        Log.debug(format('Running sentiment analysis').yellow)
+        summary_analysis['sentiment'] = analyze_body_sentiment
+
+        @score = summary_analysis['sentiment']['documentSentiment']['score']
+        @magnitude = summary_analysis['sentiment']['documentSentiment']['magnitude']
+
+        save_doc = true
+        save_summary = true
+      end
+
+      if !summary_analysis.has_key?( 'syntax' ) || summary_analysis['syntax'] == nil
+        Log.debug(format('Running syntax analysis').yellow)
+        syntax = analyze_body_syntax( false )
+        summary_analysis['syntax'] = syntax
+        save_summary = true
+      end
+
+      if save_doc == true
+        save
+        flush_dyn
+        Misty::nap( 'Saving doc' )
+      end
+
+      if save_summary == true
+        Log.debug(format('Saving entity analysis'))
+        Dyn::save_article_entities_analysis( summary_analysis )
+        # Dyn::get_article_analysis( @article_id, digest, true )
+      end
+
+      ## Line-by-line analysis isn't really used any more
+      #get_body.each do |body_el|
+      [].each do |body_el|
         digest = Digest::SHA1.hexdigest( body_el['body'] )
         analysis = Dyn::get_article_analysis( @article_id, digest )
 
-        if @score == nil
-          Log.debug('Score is nil')
-          if analyze_language_body
-            save
-            flush_dyn
-          end
-        end
-
-        next if analysis != nil 
+        analysis = nil if force == true 
+        next if analysis != nil && body_el.has_key?( 'sentiment' ) && body_el['sentiment'] != nil
 
         doc = { 
           'digest' => digest,
@@ -322,19 +413,31 @@ module Misty
         body_el['sentiment'] = doc['sentiment']['documentSentiment']
 
         Dyn::save_article_analysis( doc )
-        Misty::nap( 'saving article analysis' )
-
-        analysis = Dyn::get_article_analysis( @article_id, digest, true )
-        Misty::nap( 'refreshing language analysis' )
+        #Misty::nap( 'saving article analysis' )
       end
     end
 
-    def analyze_language_body
+    def analyze_body_syntax( force=false )
       return false if !has_body?
-      entire_body = get_body.map{|b| b['body'] }.join( ' ' )
-      sentiment = analyze( 'sentiment', entire_body )
-      @score = sentiment['documentSentiment']['score']
-      @magnitude = sentiment['documentSentiment']['magnitude']
+      analyze( 'syntax', get_entire_body, force )
+    end
+
+    def analyze_body_entities( force=false )
+      return false if !has_body?
+      analyze( 'entities', get_entire_body )
+    end
+
+    def analyze_body_sentiment( force=false )
+      return false if !has_body?
+      analyze( 'sentiment', get_entire_body )
+    end
+
+    def emote
+      get_body.each do |body_el|
+        if body_el['body'].match( /mental state/ )
+          Log.debug( 'Found mental state' )
+        end
+      end
     end
 
   end

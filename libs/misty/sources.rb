@@ -32,6 +32,72 @@ module Misty
       'authors' => ''
     },
 
+    'jacksonville.com' => {
+      'body' => '//div[@class=field-article-body]/div/p',
+      'title' => '//h1[@class*=story-title]',
+      'authors' => '//div[@class=field-authors]/a',
+      'published_at' => '//span[@class=story-date-data]'
+    },
+
+    'weather.com' => {
+      'body' => '//div[@class*=field-name-body]/div/div/p',
+      'title' => '//div[@class=pane-content]/h1',
+      'published_time' => '//span[@class=date-display-single]'
+    },
+
+    # 'template' => {
+      # 'body' => '//div[@class=story]/p',
+      # 'title' => '//h1[@class=posttitle]',
+      # 'published_time' => '//time[@class=entry-date]'
+    # },
+
+    'www.dhakatribune.com' => {
+      'body' => '//div[@class=text]/p',
+      'title' => '//h1[@class=post_title]',
+      'authors' => '//item[@itemprop=name]'
+    },
+
+    'www.pakistantoday.com.pk' => {
+      'body' => '//div[@class=entry-content]/p',
+      'title' => '//h1[@class=entry-title]',
+      'updated_time' => '//time[@class=entry-date]'
+    },
+
+    'm.dailykos.com' => {
+      'body' => '//div[@class*=intro-text]/noscript/p',
+      'title' => '//div[@class=title]',
+      'authors' => '//span[@class=author_name]',
+      'published_time' => '//time[@class=dt-updated]'
+    },
+
+    'www.politico.com' => {
+      'body' => '//div[@class*=story-text]/p',
+      'title' => '//span[@itemprop=headline]',
+      'authors' => '//a[@rel=author]',
+      'published_time' => '//time[@itemprop=datePublished]'
+    },
+
+    'wjla.com' => {
+      'body' => '//div[@class=sd-news-story-text]/p',
+      'title' => '//div[@class=component-story-title-v1]/h1',
+      'authors' => '//p[@class=sd-news-author]'
+    },
+
+    'us.blastingnews.com' => {
+      'body' => '//div[@class*=article-body]/p',
+      'title' => '//h1[@itemprop=headline]',
+      'authors' => '//span[@itemprop=name]',
+      'updated_time' => '//time[@class*=time-modified]',
+      'published_time' => '//time[@class*=time-published]'
+    },
+
+    'www.insideedition.com' => {
+      'body' => '//div[@class*=article-txt]/p',
+      'title' => '//h1[@id=main-headline]',
+      # 'authors' => '', self published?
+      'published_time' => '//time'
+    },
+
     'www.bayoubuzz.com' => {
       'body' => '//div[@class=itemFullText]/p',
       'title' => '//h2[@class=itemTitle]',
@@ -206,7 +272,7 @@ module Misty
 
     'www.cnbc.com' => { ## research HUD items as li's
       'body' => '//div[@itemprop=articleBody]/p',
-      'title' => '//div[@class=story-top]',
+      'title' => '//h1[@class=title]',
       'authors' => '//div[@itemprop=author]/a',
       'update_time' => '//time[@itemprop=dateUpdated]'  
     },

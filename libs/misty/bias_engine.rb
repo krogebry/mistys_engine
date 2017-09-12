@@ -26,15 +26,8 @@ module Misty
 
 
     def converge( tokens, entities )
-      #@tokens = tokens
-      # found_tokens = []
-      # found_tokens << find_attributes( 'Trump' )
-      # found_tokens << find_conjectives( 'Trump' )
-      # found_tokens.flatten.compact
       @biases.each do |bias|
         bias.run( tokens, entities, @descriptions )
-        # pp bias
-
         if bias.found_matches > 0
           Log.debug(format('Article is bias on rule [%s] @%i matches', bias.name, bias.found_matches).yellow)
         end

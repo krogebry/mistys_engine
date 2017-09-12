@@ -1,3 +1,15 @@
+<style>
+label, input { display:block; }
+input.text { margin-bottom:12px; width:95%; padding: .4em; }
+fieldset { padding:0; border:0; margin-top:5px; }
+h1 { font-size: 1.2em; margin: .6em 0; }
+div#users-contain { width: 350px; margin: 20px 0; }
+div#users-contain table { margin: 1em 0; border-collapse: collapse; width: 100%; }
+div#users-contain table td, div#users-contain table th { border: 1px solid #eee; padding: .6em 10px; text-align: left; }
+.ui-dialog .ui-state-error { padding: .3em; }
+.validateTips { border: 1px solid transparent; padding: 0.3em; }
+</style>
+
 <style> 
 #header td{
   width: 25%;
@@ -10,16 +22,15 @@
   padding: 10px;
 }
 
-.article_line_summary{
+.line_bias{
   display: none;
 }
 </style>
 
 <script type="text/javascript">
 $(document).ready(function(){
-  $(".article_line").click(function(e){
-    $(this).find(".article_line_summary").toggle();
-  });
+  var line_id, dialog, form,
+      tips = $( ".validateTips" );
 
   $("#force_refresh").click(function(){
     $.ajax({
@@ -30,6 +41,45 @@ $(document).ready(function(){
     })
   });
 
+  function addUser() {
+    var valid = true;
+    var selected_val = $("#bias_type option:selected").val();
+
+    $.ajax({ 
+      url: "/article/<%= article.article_id %>/add_bias",
+      data: {
+        bias: selected_val,
+        digest: line_id
+      },
+      method: 'post',
+      complete: function( res, s ){
+        window.location = window.location
+      }
+    });
+  };
+
+  var dialog = $( "#dialog-form" ).dialog({
+    modal: true,
+    width: 350,
+    height: 200,
+    autoOpen: false,
+    buttons: {
+      "Create bias": addUser,
+      Cancel: function() {
+        dialog.dialog( "close" );
+      }
+    },
+    close: function() {
+      allFields.removeClass( "ui-state-error" );
+      dialog.dialog( "close" );
+    }
+  });
+
+  $( ".create-bias" ).button().on( "click", function( e ) {
+    line_id = $(e.target).attr('id');
+    //console.log( $(e).attr('id') );
+		dialog.dialog( "open" );
+	});
 });
 </script>
 
@@ -48,22 +98,19 @@ $(document).ready(function(){
 </tr>
 </table>
 
+<table id="body" class="display" cellspacing="0" width="100%">
 <% article.get_body.each do |line| %>
-<div class="article_line">
-  <%= line['body'] %>
-  <% if false %>
-  <div class="article_line_summary">
-  <table width="100%">
-    <tr>
-      <td><a href="/article/<%= article.article_id %>/line/<%= line['digest'] %>">Analysis</a></td>
-      <td><%= line['sentiment']['score'].to_f if line.has_key?( 'sentiment' ) %></td>
-      <td><%= line['sentiment']['magnitude'].to_f if line.has_key?( 'sentiment' ) %></td>
-    </tr>
-  </table>
-  </div>
+<tr>
+	<td><button id="<%= line['digest'] %>" class="create-bias">+</button></td>
+	<td><% if line.has_key?( 'bias' ) %>
+  <% line['bias'].each do |bias| %>
+  	<span class="bias"><%= bias %></span>
   <% end %>
-</div>
+  <% end %> </td>
+	<td><div class="article_line"> <%= line['body'] %></td>
+</tr>
 <% end %>
+</table>
 
 <table>
 <% summary_analysis['entities'].map{|e| e.merge({ 'salience' => e['salience'].to_f })}.sort{|a,b| b['salience'].to_f <=> a['salience'].to_f }.each do |e| %>
@@ -75,4 +122,22 @@ $(document).ready(function(){
 <% end %>
 </table>
 
-
+<div id="dialog-form" title="Create new bias">
+  <p class="validateTips"></p>
+  <form>
+    <fieldset>
+      <label for="bias_type">Bias</label>
+      <select id="bias_type" name="bias_type" class="text ui-widget-content ui-corner-all"> 
+        <option selected value="emof">Emotional misrepresentation of facts</option>
+        <option value="ir">Intentional redirection</option>
+        <option value="mof">Misrepresentation of facts</option>
+        <option value="fq">False quote</option>
+        <option value="nc">Name calling</option>
+        <option value="qf">Questionable fact, possibly bullshit</option>
+        <option value="vl">Victum language</option>
+      </select>
+      <!-- Allow form submission with keyboard without duplicating the dialog button -->
+      <input type="submit" tabindex="-1" style="position:absolute; top:-1000px">
+    </fieldset>
+  </form>
+</div>

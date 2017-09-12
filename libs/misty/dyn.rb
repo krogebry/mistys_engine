@@ -27,62 +27,41 @@ module Misty
     end
 
     def self.save_article_entities_analysis( doc )
-      begin
-        [ 'sentiment', 'syntax', 'entities' ].each do |k|
-          #this_doc = {
-            #k => doc[k],
-            #'digest' => doc['digest'],
-            #'article_id' => doc['article_id'],
-            #'article_id_digest' => doc['article_id_digest']
-          #}
-
-          Log.debug(format('Saving: %s', k))
-
-          S3Client.put_object({
-            key: format('analysis/dev/%s_%s', k, doc['article_id_digest'] ),
-            body: doc[k].to_json,
-            bucket: 'mistysengine'
-          })
-        end
-
-        Misty::nap('Saving article analysis')
-        get_article_analysis( doc['article_id'], doc['digest'], true )
-        #Misty::nap('Flushing article analysis cache')
-
-      rescue Aws::DynamoDB::Errors::ValidationException => e
-        Log.fatal(format('save failed: %s', e).red)
-        exit
-
+      line_id = format('%s-%s', doc['article_id'], doc['digest'])
+      [ 'sentiment', 'syntax', 'entities' ].each do |k|
+        cache_key = format('misty_dev_aa_%s_%s', k, line_id)
+        Log.debug(format('Saving: %s', cache_key))
+        S3Client.put_object({
+          key: format('analysis/dev/%s', cache_key),
+          body: doc[k].to_json,
+          bucket: 'mistysengine'
+        })
+        # Misty::nap( 'Saving' )
       end
+
+      get_article_analysis( doc['article_id'], doc['digest'], true )
     end
 
     def self.get_article_analysis( article_id, digest, force=false )
       return_data = {}
       line_id = format('%s-%s', article_id, digest)
       [ 'sentiment', 'syntax', 'entities' ].each do |k|
-        #query = {
-          #index_name: 'article_id_digest-index',
-          #table_name: format('misty_dev_article_analysis_%s', k),
-          #expression_attribute_values: {
-            #':v1' => line_id
-          #}, 
-          #key_condition_expression: 'article_id_digest = :v1' 
-        #}
-
         cache_key = format('misty_dev_aa_%s_%s', k, line_id)
+        # Log.debug(format('Del: %s (%s)', cache_key, force))
         Cache.del_key( cache_key ) if force == true
 
         data = Cache.cached_json( cache_key ) do
           begin
             object = ""
             S3Client.get_object({
-              key: format('analysis/dev/%s_%s', k, line_id ),
+              key: format('analysis/dev/%s', cache_key ),
               bucket: 'mistysengine'
             }) do |chunk|
               object << chunk
             end
 
           rescue Aws::S3::Errors::NoSuchKey => e
+            # Log.debug(format('No key: %s', e).red)
             object = [].to_json
 
           end

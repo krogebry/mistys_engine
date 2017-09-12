@@ -1,3 +1,4 @@
+
 is_described_as :dislike do
   words [ 'deranged', 'idiot', 'incompetent', 'unstable', 'insane', 'bigot', 'wrong', 'feckless', 'bored' ]
 end
@@ -13,12 +14,15 @@ bias "Trump is evil" do
   end
 end
 
-bias "Hillary is good" do
+bias "Hillary is evil" do
   subject :person do
-    is_described_as [ "Trump", "Donald Trump", "president" ]
+    is_described_as [ "Hillary Clinton", "Mrs. Clinton", "Clinton", "Hillary" ]
     is_described_with :like
   end
 end
+
+#bias "Fox is evil" do
+#end
 
 bias "Hillary is good" do
   #subject :event do

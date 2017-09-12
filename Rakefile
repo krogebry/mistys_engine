@@ -1,5 +1,6 @@
 require 'pp'
 require 'json'
+require 'differ'
 require 'logger'
 require 'aws-sdk'
 require 'nokogiri'
@@ -46,7 +47,7 @@ task :proc_sqs do |t,args|
   messages.messages.each do |message|
     begin
       body = JSON::parse message.body 
-      pp body
+      #pp body
       Rake::Task['article:grab'].invoke body['topic_id'], body['url']
 
       SQSClient.delete_message(
@@ -61,32 +62,89 @@ task :proc_sqs do |t,args|
   end
 end
 
+desc 'Find missing generators'
+task :find_missing_gens do |t,args|
+  no_parsers = {}
+  topics = Misty::Dyn::get_topics( false )
+  topics.each do |topic|
+    topic.get_articles.each do |article|
+      host = article.get_host
+      if !Misty::SOURCES_MAP.has_key?( host )
+        no_parsers[host] ||= []
+        no_parsers[host].push({ :url => article.url, :topic_id => article.topic_id })
+        #Log.debug(article.get_host) 
+      end
+    end
+  end
+
+  #pp no_parsers
+  no_parsers.each do |host, targets|
+    Log.debug( host )
+    targets.each do |t|
+      cmd = format('rake article:grab["%s, %s"]', t[:topic_id], t[:url])
+      puts cmd
+    end
+  end
+
+  Log.debug(format('Found %i unknown parsers', no_parsers.size))
+
+end
+
 namespace :topic do
+  desc 'Clear bias information'
+  task :rm_biases, :topic_id, :force do |t,args|
+    force = args[:force] == nil ? false : true
+    topic = Misty::Dyn.get_topic_by_id( args[:topic_id] )
+    Log.debug(format('Clearing biases: %s (%s)', topic.topic_id, force))
+    topic.get_articles.each do |article|
+      next if !article.has_body?
+      article.rm_biases
+    end
+  end
+
   desc "Run language analysis"
   task :lang, :topic_id, :force do |t,args|
-    force = args[:force] == nil ? true : false
-    Log.debug(format('Running language analysis: %s', args[:topic_id]))
+    force = args[:force] == nil ? false : true
     topic = Misty::Dyn.get_topic_by_id( args[:topic_id] )
+    Log.debug(format('Running language analysis: %s (%s)', topic.topic_id, force))
     topic.get_articles.each do |article|
       article.analyze_language( force )
+      # pp article
     end
+  end
+
+  desc "Run diff analysis"
+  task :diff, :topic_id, :force do |t,args|
+    force = args[:force] == nil ? true : false
+    topic = Misty::Dyn.get_topic_by_id( args[:topic_id] )
+    Log.debug(format('Running language analysis: %s (%s)', topic.topic_id, force))
+    articles = topic.get_articles.select{|a| a.has_body? }
+    #topic.get_articles.each do |article|
+      #article.analyze_language( force )
+    #end
+    Differ.format = :color
+    pp Differ.diff_by_line( articles[0].get_entire_body, articles[1].get_entire_body )
   end
 
   desc "Run bias engine"
   task :be, :topic_id, :force do |t,args|
     force = args[:force] == nil ? true : false
-    Log.debug(format('Running language analysis: %s', args[:topic_id]))
+    Log.debug(format('Running bias engine on topic: %s', args[:topic_id]))
     topic = Misty::Dyn.get_topic_by_id( args[:topic_id] )
+
+    be = Misty::BiasEngine.new
+    be.compile()
+
     topic.get_articles.each do |article|
       sum = article.get_summary_analysis( false )
-      be = Misty::BiasEngine.new
-      be.compile()
+      next if sum['syntax'].size == 0 || sum['entities'].size == 0
+      Log.debug(format('Running bias engine on article: %s', article.article_id))
       be.converge( sum['syntax']['tokens'], sum['entities'] )
     end
   end
 
-  desc "Analyize entities"
-  task :anal_entities, :topic_id do |t,args|
+  desc "Create subject importance map"
+  task :create_sim, :topic_id do |t,args|
     quote_map = {}
     salience_map = {}
 
@@ -97,25 +155,11 @@ namespace :topic do
       next if !article.has_body?
 
       sum = article.get_summary_analysis( false )
-
-      #body = article.get_entire_body
-      ## Find quotes
-      #body.scan( /\s"(.*?)"\s/ ).each do |m|
-        #digest = Misty::Dyn::digest( m[0] )
-        #quote_map[digest] ||= { :content => m[0], :cnt => 0.0 }
-        #quote_map[digest][:cnt] += 1
-      #end
-
-      be = Misty::BiasEngine.new
-      be.compile()
-      found = be.converge( sum['syntax']['tokens'], sum['entities'] )
-
       if sum == nil
         Log.debug(format('Article is missing summary: %s', article.article_id))
         exit
-        #article.analyze_language( false )
-        #sum = article.get_summary_analysis
       end
+
       sorted_by_salience = sum['entities'].map{|e| e.merge({ 'salience' => e['salience'].to_f })}.sort{|a,b| b['salience'] <=> a['salience'] }
 
       sorted_by_salience[0..5].each do |s|
@@ -124,14 +168,11 @@ namespace :topic do
         salience_map[s['name']][:salience] += s['salience']
         salience_map[s['name']][:mentions] << s['mentions']
         salience_map[s['name']][:mentions].flatten!
-        #salience_map[s['name']][:num_mentions] += s['mentions'].size
       end
     end
 
-    #salience_map.each do |name, info|
     subject_importance_map = {}
     salience_map.sort_by{|k,v| v[:salience] }.reverse[0..10].to_h.each do |name, info|
-      #pp info
       mention_map = {}
       #Log.debug(format('Subject: %s %.2f', name, info[:salience]))
       info[:mentions].each do |mention|
@@ -148,11 +189,11 @@ namespace :topic do
     end
 
     #pp subject_importance_map
-
-    #Misty::Dyn::save_subject_importance_map({
-      #'map' => subject_importance_map,
-      #'topic_id' => topic.topic_id
-    #})
+    Log.debug('Saving subject importance map')
+    Misty::Dyn::save_subject_importance_map({
+      'map' => subject_importance_map,
+      'topic_id' => topic.topic_id
+    })
   end
 
   desc "Scrape"
@@ -187,6 +228,7 @@ namespace :topics do
   desc "Summarize language"
   task :lang, :topic_id, :force do |t,args|
     force = args[:force] == nil ? true : false
+    Log.debug(format('Force: %s', force))
     topics = Misty::Dyn::get_topics( false )
     topics.each do |topic|
       Log.debug(format('Running language analysis on topic: %s', topic.topic_id))
@@ -218,12 +260,13 @@ namespace :topics do
 
     topics = Misty::Dyn::get_topics
     topics.each do |topic|
-      next if topic.topic_id == 'ca0b186cee4df7782b6555e0904ff80385336cca'
+      #next if topic.topic_id == 'ca0b186cee4df7782b6555e0904ff80385336cca'
 
 			url = topic.scrape_url
       next if url == nil
 
     	cache_key = format('url_%s', Digest::SHA1.hexdigest( url ))
+      Log.debug(format('Getting topic article list: %s (%s)', url, topic.topic_id))
     	data = Cache.cached( cache_key ) do
       	r = RestClient.get( url )
       	r.body
@@ -299,20 +342,18 @@ end
 
 namespace :article do
   desc 'Analyze'
-  task :analyze, :article_key do |t,args|
+  task :lang, :article_key do |t,args|
     article = Misty::Dyn::get_article_by_id( args[:article_key] )
     article.analyze_language( false )
   end
 
   desc 'Grab by id'
-  task :grab_by_id, :article_key do |t,args|
+  task :scrape, :article_key do |t,args|
     article = Misty::Dyn::get_article_by_id( args[:article_key] )
-    #article.analyze_language( false )
-    #article = Misty::Article::get_by_url( args[:url] )
+    #pp article
     if article.process_page( article.url, article.article_id )
       article.analyze_language( true )
       article.save( true )
-      #Misty::nap( 'Article save', args[:long] )
     end
   end
 
@@ -321,21 +362,16 @@ namespace :article do
     mr = {}
     Misty::SOURCES_MAP.each do |hostname, xpaths|
       next if hostname == 'template'
-      #pp xpaths
       xpaths.each do |k,v|
         mr[k] ||= {}
         mr[k][v] ||= 0
         mr[k][v] += 1
       end
     end
-    pp mr
   end
 
   desc "Grab an article"
   task :grab, :key, :url, :long do |t,args|
-    # Log.debug('TopicKey: %s' % args[:key]) 
-    # Log.debug('URL: %s' % args[:url]) 
-    # Log.debug('Long: %s' % args[:long]) 
     article = Misty::Article::get_by_url( args[:url] )
     if article.process_page( args[:url], args[:key] )
       article.analyze_language( false )

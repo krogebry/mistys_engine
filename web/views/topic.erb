@@ -56,24 +56,14 @@ $(document).ready(function(){
   | <span><a href="/">Home</a></span>
 </div>
 
-<% if subject_importance_map != nil && subject_importance_map['map'] != nil %>
-<h2>subject_importance_map</h2>
-<% subject_importance_map['map'].each do |subject, info| %>
-<div>
-  <span><%= subject %> ( <%= '%.2f' % info['salience'] %> ): </span>
-  <% info['mention_map'].sort_by{|k,v| v['cnt'].to_f }.reverse.to_h.each do |k,v| %>
-    <span><%= k %> (<%= '%.2f' % v['cnt'] %> )</span>
-  <% end %>
-</div>
-<% end %>
-<% end %>
-
 <table id="topics" class="display" cellspacing="0" width="100%">
   <tr>
+  <!--
     <th>Info</th>
+  -->
+    <th>Bias</th>
     <th>Title</th>
     <th>Source</th>
-    <th>Link</th>
     <th>Score</th>
     <th>Magnitude</th>
   </tr>
@@ -81,14 +71,19 @@ $(document).ready(function(){
   <% articles.each do |article| %>
   <% next if !article.has_body? %>
   <tr class="data">
+    <!--
     <td><p class="more_info" article_id="<%= article.article_id %>">Summary</p></td>
-    <td><a href="/article/<%= article.article_id %>"><%= article.data['article']['title'] %></a></td>
-    <td><%= article.source %></td>
-    <td><a href="<%= article.url %>" target="_new">Link</a></td>
+    -->
+    <td><% article.get_biases.each do |bias, cnt| %>
+      <span><%= bias %>(<%= cnt %>)</span>
+    <% end %></td>
+    <td><a href="/article/<%= article.article_id %>"><%= article.get_title %></a></td>
+    <td> <a href="<%= article.url %>" target="_new"> <%= article.source %> </a> </td>
     <td><%= "%.3f" % article.score.to_f %></td>
     <td><%= "%.3f" % article.magnitude.to_f %></td>
-
-  </tr> <tr id="article_<%= article.article_id %>" class="info_summary">
+  </tr> 
+  <!--
+  <tr id="article_<%= article.article_id %>" class="info_summary">
     <td colspan="6" style="vertical-align: top;">
     <table style="width: 100%;">
     <tr>
@@ -113,7 +108,19 @@ $(document).ready(function(){
     </table>
     </td>
   </tr>
+  -->
   <% end %>
-
 </table>
 
+
+<% if subject_importance_map != nil && subject_importance_map['map'] != nil %>
+<h2>subject_importance_map</h2>
+<% subject_importance_map['map'].each do |subject, info| %>
+<div>
+  <span><%= subject %> ( <%= '%.2f' % info['salience'] %> ): </span>
+  <% info['mention_map'].sort_by{|k,v| v['cnt'].to_f }.reverse.to_h.each do |k,v| %>
+    <span><%= k %> (<%= '%.2f' % v['cnt'] %> )</span>
+  <% end %>
+</div>
+<% end %>
+<% end %>

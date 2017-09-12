@@ -18,6 +18,12 @@ module Misty
     'update_time' => '//span[@class=updated-time]'
   }
 
+  WORDPRESS_COM = {
+    'body' => '//div[@itemprop=articelBody]/p',
+    'title' => '//h1[@class=entry-title]',
+    'authors' => '//span[@class=entry-title]/a',
+  }
+
   WORDPRESS_481 = { ## boingboing
     'body' => '//div[@id=story]/p',
     'title' => '//div[@id=headline]/h1',
@@ -30,6 +36,121 @@ module Misty
       'body' => '',
       'title' => '',
       'authors' => ''
+    },
+
+    'www.thedailybeast.com' => {
+      'body' => '//div[@class=Mobiledoc]/p'
+    },
+
+    'www.voanews.com' => {
+      'body' => '//div[@class=wsw]/p',
+      'title' => '//h1[@class=pg-title]'
+    },
+
+    'www.dw.com' => {
+      'body' => '//div[@class=longText]/p',
+      'title' => '//div[@class=col3]/h1'
+    },
+
+    'www.slate.com' => {
+      'body' => '//div[@class*=body]/div/p',
+      'title' => '//h1[@class=hed]'
+    },
+
+    'time.com' => {
+      'disabled' => true  ## Time makes this intentionally difficult.
+      # 'body' => '//article[@class=row]/p'
+    },
+
+    'scallywagandvagabond.com' => {
+      'body' => '//div[@class*=td-post-content]/p',
+      'title' => '//h1[@class=entry-title]',
+      'authors' => '//div[@class=td-author-by]/a'
+    },
+
+    'www.nationalreview.com' => {
+      'body' => '//div[@itemprop=articleBody]/p',
+      'title' => '//span[@itemprop=name]',
+      'published_time' => '//time[@itemprop=datePublished]'
+    },
+
+    'gephardtdaily.com' => {
+      'body' => '//div[@class=td-post-content]/p',
+      'title' => '//h1[@class=entry-title]',
+      'authors' => '//div[@class=td-post-author-name]/a'
+    },
+
+    'www.bizpacreview.com' => {
+      'body' => '//div[@class=entry-content]/p',
+      'title' => '//h1[@class=entry-title]',
+      'authors' => '//a[@rel=author]'
+    },
+
+    'abovethelaw.com' => {
+      'body' => '//div[@class=content]/p',
+      'title' => '//h1[@class=post-title]/a',
+      'authors' => '//a[@rel=author]'
+    },
+
+    'www.alternet.org' => {
+      'body' => '//div[@class*=the_body]/p',
+      'title' => '//h1[@class=node-title]',
+      'authors' => '//div[@class*=byline]/em/a'
+    },
+
+    'www.mediamatters.org' => {
+      'body' => '//div[@class=item-body]/p',
+      'title' => '//div[@class*=bd-headline]/h1'
+    },
+
+    'dailycaller.com' => {
+      'body' => '//div[@class*=thepost]/div/p',
+      'title' => '//h1',
+      'authors' => '//div[id=name]',
+      'published_time' => '//div[@class=dateline]'
+    },
+
+    'ew.com' => {
+      'body' => '//div[@class=article-body__inner]/p',
+      'title' => '//h1[@class=article-header__title]/p',
+      'authors' => '//h1[@rel=author]'
+    },
+
+    'variety.com' => {
+      'body' => '//div[@class=variety-content-wrapper]/p',
+      'title' => '//header/h1',
+      'authors' => '//h1[@rel=author]'
+    },
+
+    'deadline.com' => {
+      'body' => '//div[id=article-entry]/div/p',
+      'title' => '//h1[@class*=post-title]',
+      'authors' => '//h1[@rel=author]'
+    },
+
+    'www.usnews.com' => {
+      'body' => '//div[id=ad-in-text-target]/div/p',
+      'title' => '//h1[@class*=hero-heading]'
+    },
+
+    'www.foxcarolina.com' => {
+      'body' => '//div[id=WNStoryBody]/p',
+      'title' => '//div[id=WNStoryHeader]/h3',
+      'authors' => '//span[@class=author]'
+    },
+
+    'www.nytimes.com' => {
+      'body' => '//div[@class*=story-body]/p',
+      'title' => '//h1[@itemprop=headline]',
+      'authors' => '//span[@class=byline-author]',
+      'updated_time' => '//meta[@itemprop=dateModified]',
+      'published_time' => '//meta[@itemprop=datePublished]'
+    },
+
+    'www.rt.com' => {
+      'body' => '//div[@class*=article__text]/p',
+      'title' => '//h1[@class=article__heading]',
+      'published_time' => '//time[@class=date]'
     },
 
     'jacksonville.com' => {
@@ -227,16 +348,14 @@ module Misty
     },
 
     'www.latimes.com' => {
-      'disabled' => true, ## fuck this site.
-      #'body' => '//div[class=lb-card-body]/div/p',
-      #'body' => '//div[@class*=lb-widget-text]/p',
+      'body' => '//div[@class*=lb-widget-text]/p',
       'title' => '//h2[@itemprop=headline]',
       'authors' => '//a[@itemprop=author]',
-      'update_time' => '//time[@itemprop=datePublished]'
+      'published_time' => '//time[@itemprop=datePublished]'
     },
 
     'www.businessinsider.com' => {
-      'body' => '//div[@class*=post-content]/p',
+      'body' => '//div[@class*=post-content]/div/p',
       'title' => '//div[@class=sl-layout-post]/h1',
       'authors' => '//li[@class=single-author]/a',
       'update_time' => '//span[@data-bi-format=date]'

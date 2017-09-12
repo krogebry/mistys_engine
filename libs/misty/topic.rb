@@ -9,6 +9,18 @@ module Misty
 
     @scrape_url
 
+    def self.create( topic_name, topic_scrape_url )
+  		DynamoClient.put_item({
+    		item: {
+      		topic_id: Digest::SHA1.hexdigest( topic_name ),
+      		scrape_url: topic_scrape_url,
+      		topic_name: topic_name
+    		},
+    		table_name: format( 'misty_%s_topics', ENV['MISTY_ENV_NAME'] )
+  		})
+  		Cache.del_key(format('topics_%s', ENV['MISTY_ENV_NAME'] ))
+		end
+
     attr_accessor :topic_id, :topic_name, :scrape_url
     def initialize( data )
       @topic = data

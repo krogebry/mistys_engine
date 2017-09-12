@@ -3,6 +3,6 @@
 
 <% results.each do |article| %>
 <div>
-  <a href="/article/<%= article.article_id %>"><%= article.get_title %></a>
+  <a href="/article/<%= article.article_id %>"><%= article.get_title %> ( <%= article.source %> )</a>
 </div>
 <% end %>

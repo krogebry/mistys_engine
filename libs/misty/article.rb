@@ -15,7 +15,7 @@ module Misty
     @score
     @magnitude
 
-    attr_accessor :article_id, :source, :magnitude, :score, :article, :data, :url
+    attr_accessor :article_id, :source, :magnitude, :score, :article, :data, :url, :topic_id
     #def initialize( topic_id, url )
     def initialize( data=nil )
       self.load( data )
@@ -54,6 +54,40 @@ module Misty
 
     def get_body
       @data['article']['body']
+    end
+
+    def get_host
+      uri = if @uri == nil
+        URI( @url )
+      else
+        @uri
+      end
+      uri.host
+    end
+
+    def add_bias( digest, bias )
+      line = get_body.select{|b| b['digest'] == digest }.first
+      line['bias'] ||= []
+      line['bias'].push( bias )
+      save( true )
+    end
+
+    def get_biases
+      bias_list = {}
+      get_body.select{|b| b.has_key?( 'bias' )}.each do |l|
+        l['bias'].each do |bias|
+          bias_list[bias] ||= 0
+          bias_list[bias] += 1
+        end
+      end
+      bias_list
+    end
+
+    def rm_biases
+      get_body.select{|b| b.has_key?( 'bias' )}.each do |l|
+        l['bias'] = []
+      end
+      save( true )
     end
 
     def get_entire_body
@@ -98,16 +132,28 @@ module Misty
           r = RestClient::Request.execute(method: :get, url: url, headers: headers, verify_ssl: false)
           r.body
 
+        rescue RestClient::InternalServerError => e
+          Log.fatal(format('Failed to get page: %s', e).red)
+          nil
+
+        rescue RestClient::MovedPermanently => e
+          Log.fatal(format('Failed to get page: %s', e).red)
+          nil
+
+        rescue RestClient::Exceptions::ReadTimeout => e
+          Log.fatal(format('Failed to get page: %s', e).red)
+          nil
+
         rescue RestClient::NotFound => e
-          Log.fatal('Failed to get page'.red)
+          Log.fatal(format('Failed to get page: %s', e).red)
           nil
 
         rescue RestClient::ServiceUnavailable => e
-          Log.fatal('Failed to get page'.red)
+          Log.fatal(format('Failed to get page: %s', e).red)
           nil
 
         rescue RestClient::RangeNotSatisfiable => e
-          Log.fatal('Failed to get page'.red)
+          Log.fatal(format('Failed to get page: %s', e).red)
           nil
 
         end
@@ -135,8 +181,6 @@ module Misty
         'magnitude' => @magnitude,
         'article_id' => @article_id
       }
-      #pp doc
-      #exit
       doc['article'] = @data['article'] if @data.has_key?( 'article' )
 
       f = get_article_file( @topic_id, @article_id )
@@ -145,15 +189,20 @@ module Misty
 
       if write_to_dyn == true
         Dyn::save_article( doc )
-        #Misty::nap( 'article save' )
-
-        # Dyn::get_article_by_id( @article_id, true )
-        # Misty::nap( 'refreshing cache for article' )
+        Dyn::get_article_by_id( @article_id, true )
       end
     end
 
     def flush_page
       Cache.del_key(format( 'url_%s', @article_id ))
+    end
+
+    def get_title
+      if @data['article'].has_key?( 'title' ) && @data['article']['title'] != nil 
+        @data['article']['title'][0,100]
+      else
+        "BLANK TITLE"
+      end
     end
 
     def flush_dyn
@@ -162,18 +211,20 @@ module Misty
       Cache.del_key( dyn_key )
     end
 
+    def handle_body_elements( elements )
+      @data['article']['body'] ||= []
+      if @data['article']['body'].size == 0
+        @data['article']['body'] = elements.map{|el| { 
+          'body' => el.text,
+          'digest' => Digest::SHA1.hexdigest( el.text )
+        } if el.text != "" && el.text != " "}.compact
+      end
+    end
+
     def handle_elements( type, elements )
       case type
       when 'body'
-        @data['article']['body'] ||= []
-
-        ## populate only if the body is currently empty.
-        if @data['article']['body'].size == 0
-          @data['article']['body'] = elements.map{|el| { 
-            'body' => el.text,
-            'digest' => Digest::SHA1.hexdigest( el.text )
-          } if el.text != "" && el.text != " "}.compact
-        end
+        handle_body_elements( elements )
 
       when 'title'
         @data['article']['title'] = elements.first.text
@@ -214,8 +265,6 @@ module Misty
         end
 
       elsif elements.first.name == 'span' && elements.first.attributes.has_key?( 'rel' )
-        #pp elements.first.attributes
-        #ts = Time.parse( elements.first.attributes['rel'].value )
         ts = Time.at( elements.first.attributes['rel'].value.to_f )
 
       elsif elements.first.name == 'meta'
@@ -267,6 +316,9 @@ module Misty
           elsif generator.match( /WordPress\s4\.8\.1/ )
             m = Misty::WORDPRESS_481
 
+          elsif generator.match( /WordPress\.com/ )
+            m = Misty::WORDPRESS_COM
+
           elsif generator.match( /WordPress/ )
             m = Misty::WORDPRESS
 
@@ -277,28 +329,19 @@ module Misty
           end
         else
           Log.fatal(format('Unable to find generator').blue)
-          return false
+          # return false
+          m = {}
 
         end
       end
 
-      published_el = xml.css( "//meta[@property='article:published_time']" )
-      if published_el.size > 0
-        ts = process_time( published_el )
-        if ts 
-          Log.debug(format('Published: %s', ts))
-          @data['article']['published_time'] = ts.to_f
-        end
-      end
+      m.delete( 'body' ) if get_body_el( xml )
+      m.delete( 'title' ) if get_title_el( xml )
+      m.delete( 'author' ) if get_author_el( xml )
+      m.delete( 'modified_time' ) if get_modified_time_el( xml )
+      m.delete( 'published_time' ) if get_published_time_el( xml )
 
-      modified_el = xml.css( "//meta[@property='article:modified_time']" )
-      if modified_el.size > 0
-        ts = process_time( modified_el )
-        if ts
-          Log.debug(format('Modified: %s', ts))
-          @data['article']['modified_time'] = ts.to_f
-        end
-      end
+      #pp @data
 
       Log.debug(format('Processing: %s', @uri.host))
       m.each do |name, selector|
@@ -310,7 +353,161 @@ module Misty
         end
       end
 
+      if !@data['article'].has_key?( 'body' )
+        Log.fatal(format('Unable to find body elements: %s | %s', @article_id, @url).red)
+        #exit
+        return false
+      end
+
+      if !@data['article'].has_key?( 'title' ) || @data['article']['title'] == ""
+        Log.fatal(format('Unable to find title elements: %s | %s', @article_id, @url).red)
+        #exit
+        return false
+      end
+
       return true
+    end
+
+    def get_published_time_el( xml )
+      el = xml.css( "//meta[@property='article:published_time']" )
+      if el.size > 0
+        Log.debug('Found published time element'.yellow)
+        ts = process_time( el )
+        if ts 
+          Log.debug(format('Published: %s', ts))
+          @data['article']['published_time'] = ts.to_f
+          return true
+        end
+      end
+
+      el = xml.css( "//meta[@itemprop=datePublished]" )
+      if el.size > 0
+        Log.debug('(2) Found published time element'.yellow)
+        ts = process_time( el )
+        if ts 
+          Log.debug(format('Published: %s', ts))
+          @data['article']['published_time'] = ts.to_f
+          return true
+        end
+      end
+
+      return false
+    end
+
+    def get_modified_time_el( xml )
+      el = xml.css( "//meta[@property='article:modified_time']" )
+      if el.size > 0
+        Log.debug('(1) Found modified time element'.yellow)
+        ts = process_time( el )
+        if ts
+          Log.debug(format('Modified: %s', ts))
+          @data['article']['modified_time'] = ts.to_f
+          return true
+        end
+      end
+      return false
+    end
+
+    def get_author_el( xml )
+      el = xml.css( "//meta[@itemprop=author]" )
+      if el.size == 1
+        Log.debug('(1) Found auhtor element'.yellow)
+        @data['article']['authors'] = el.map{|el| el.text if el.text != ""}.compact
+        return true
+      end
+
+      el = xml.css( "//a[@rel=author]" )
+      if el.size == 1
+        Log.debug('Found auhtor element'.yellow)
+        @data['article']['authors'] = el.map{|el| el.text if el.text != ""}.compact
+        return true
+      end
+
+      el = xml.css( "//h1[@rel=author]" )
+      if el.size == 1
+        Log.debug('Found auhtor element'.yellow)
+        @data['article']['authors'] = el.map{|el| el.text if el.text != ""}.compact
+        return true
+      end
+
+      return false
+    end
+
+    def get_body_el( xml )
+      el = xml.css( "//div[@class*=entry-content]/p" )
+      if el.size > 0
+        Log.debug(format('(1) Found body elements %i', el.size).yellow)
+        handle_body_elements( el )
+        return true
+      end
+
+      el = xml.css( "//div[@itemprop=articleBody]/p" )
+      if el.size > 0
+        Log.debug(format('(2) Found body elements %i', el.size).yellow)
+        handle_body_elements( el )
+        return true
+      end
+
+      el = xml.css( "//div[@id=article]/p" )
+      if el.size > 0
+        Log.debug(format('(3) Found body elements %i', el.size).yellow)
+        handle_body_elements( el )
+        return true
+      end
+
+      el = xml.css( "//section[@class*=entry-content]/p" )
+      if el.size > 0
+        Log.debug(format('(4) Found body elements %i', el.size).yellow)
+        handle_body_elements( el )
+        return true
+      end
+
+      return false
+    end
+
+    def get_title_el( xml )
+      el = xml.css( "//meta[@name=description]" )
+      if el.size == 1
+        Log.debug('(1) Found title'.yellow)
+        v = el.first.attributes['content'].value
+        if v != ""
+          @data['article']['title'] = v
+          return true
+        end
+      end
+
+      el = xml.css( "//meta[@itemprop=description]" )
+      if el.size == 1
+        Log.debug('(2) Found title'.yellow)
+        v = el.first.attributes['content'].value
+        if v != ""
+          @data['article']['title'] = v
+          return true
+        end
+      end
+
+      el = xml.css( "//h1[@itemprop=headline]" )
+      if el.size == 1
+        Log.debug('(3) Found title'.yellow)
+        @data['article']['title'] = el.first.text
+        return true
+      end
+
+      el = xml.css( "//h1[@class=entry-title]" )
+      if el.size == 1
+        Log.debug('(4) Found headline'.yellow)
+        @data['article']['title'] = el.first.text
+        return true
+      end
+
+      el = xml.css( "//title" )
+      if el.size == 1
+        Log.debug('(5) Found headline'.yellow)
+        @data['article']['title'] = el.first.text
+        return true
+      end
+
+      return false
     end
 
 		def analyze( topic, line, force=false )
@@ -320,7 +517,7 @@ module Misty
   		Cache.cached_json( cache_key ) do
     		encoded = line.to_ascii.gsub( /"/, "'" )
     		cmd_ml = format('gcloud ml language analyze-%s --content="%s"', topic, encoded)
-    		Log.debug('CMD(ml): %s' % cmd_ml)
+    		# Log.debug('CMD(ml): %s' % cmd_ml)
     		res = `#{cmd_ml}`
     		if res.match( /ERROR/ )
       		Log.fatal("Unable to parse because of some stupid ass bullshit.")
@@ -352,16 +549,21 @@ module Misty
         'article_id_digest' => format( '%s-%s', @article_id, digest )
       } if summary_analysis == nil
 
+      summary_analysis['digest'] = digest if !summary_analysis.has_key?( 'digest' )
+      summary_analysis['article_id'] = @article_id if !summary_analysis.has_key?( 'article_id' )
+
       save_doc = false
       save_summary = false
 
-      if !summary_analysis.has_key?( 'entities' ) || summary_analysis['entities'].size == 0
+      if !summary_analysis.has_key?( 'entities' ) || summary_analysis['entities'] == nil || summary_analysis['entities'].size == 0
         Log.debug(format('Running entities analysis').yellow)
         summary_analysis['entities'] = analyze_body_entities['entities']
+        #pp summary_analysis
+        #exit
         save_summary = true
       end
 
-      if !summary_analysis.has_key?( 'sentiment' )
+      if !summary_analysis.has_key?( 'sentiment' ) 
         Log.debug(format('Running sentiment analysis').yellow)
         summary_analysis['sentiment'] = analyze_body_sentiment
 
@@ -380,40 +582,13 @@ module Misty
       end
 
       if save_doc == true
-        save
-        flush_dyn
+        save( true )
         Misty::nap( 'Saving doc' )
       end
 
       if save_summary == true
         Log.debug(format('Saving entity analysis'))
         Dyn::save_article_entities_analysis( summary_analysis )
-        # Dyn::get_article_analysis( @article_id, digest, true )
-      end
-
-      ## Line-by-line analysis isn't really used any more
-      #get_body.each do |body_el|
-      [].each do |body_el|
-        digest = Digest::SHA1.hexdigest( body_el['body'] )
-        analysis = Dyn::get_article_analysis( @article_id, digest )
-
-        analysis = nil if force == true 
-        next if analysis != nil && body_el.has_key?( 'sentiment' ) && body_el['sentiment'] != nil
-
-        doc = { 
-          'digest' => digest,
-          'article_id' => @article_id, 
-          'article_id_digest' => format( '%s-%s', @article_id, digest )
-        }
-
-        doc['syntax'] = analyze( 'syntax', body_el['body'] )
-        doc['entities'] = analyze( 'entities', body_el['body'] )
-        doc['sentiment'] = analyze( 'sentiment', body_el['body'] )
-
-        body_el['sentiment'] = doc['sentiment']['documentSentiment']
-
-        Dyn::save_article_analysis( doc )
-        #Misty::nap( 'saving article analysis' )
       end
     end
 

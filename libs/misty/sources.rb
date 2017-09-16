@@ -1,7 +1,13 @@
 module Misty
 
   BROKEN_SITES = [
-    'www.forbes.com'
+    'ijr.com',
+    'www.care2.com',
+    'www.news24.com',
+    'www.forbes.com',
+    'www.good4utah.com',
+    'www.amnestyusa.org',
+    'www.post-gazette.com'
   ]
 
   DRUPAL_7 = {
@@ -36,6 +42,14 @@ module Misty
       'body' => '',
       'title' => '',
       'authors' => ''
+    },
+
+    'www.post-gazette.com' => {
+      'disabled' => 'true'
+    },
+
+    'hotair.com' => {
+      'body' => '//div[@class=salem-content-injection-wrap]/p'
     },
 
     'www.thedailybeast.com' => {

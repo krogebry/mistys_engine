@@ -1,4 +1,10 @@
 
+# @oauth = Koala::Facebook::OAuth.new(app_id, app_secret, callback_url)
+# @oauth.get_app_access_token
+
+APP_ID='171439776757489'
+APP_SECRET='326a00e8e06c2fa609f5b66b59072d04'
+
 get "/healthz" do
   { :success => true }.to_json
 end
@@ -7,19 +13,46 @@ get "/flush_cache" do
   DevOps::Cache::flush
 end
 
-get "/" do
-  query = { table_name: 'misty_dev_topics' }
-  cache_key = 'topics_%' % ENV['MISTY_ENV_NAME']
-  topics = Cache.cached_json( cache_key ) do
-    DynamoClient.scan( query ).data.to_h.to_json
-  end
+get "/fb_oauth_callback" do
+  Log.debug(format('Code: %s', params[:code]).yellow)
+  session['access_token'] = session['oauth'].get_access_token(params[:code])
 
-  erb :index, :locals => { :topics => topics['items'] }
+  graph = Koala::Facebook::API.new( session['access_token'] )
+  session['user'] = graph.get_object( 'me' )
+
+  redirect '/'
+end
+
+before do
+  if session['access_token']
+    Log.debug('Logged in'.green)
+    Log.debug(format('AccessToken: %s', session['access_token']).blue)
+
+  else
+    Log.debug('Not logged in'.red )
+
+  end
+end
+
+get '/' do
+  topics = Misty::Dyn::get_topics( false )
+  erb :index, :locals => { :topics => topics }
+end
+
+get '/login' do
+	session['oauth'] = Koala::Facebook::OAuth.new(APP_ID, APP_SECRET, "#{request.base_url}/fb_oauth_callback")
+	redirect session['oauth'].url_for_oauth_code()
+end
+
+get '/logout' do
+	session['user'] = nil
+	session['oauth'] = nil
+	session['access_token'] = nil
+	redirect '/'
 end
 
 get "/topics/refresh" do
-  cache_key = 'topics_%' % ENV['MISTY_ENV_NAME']
-  Cache.del_key( cache_key )
+  topics = Misty::Dyn::get_topics( true )
   redirect "/"
 end
 
@@ -75,18 +108,50 @@ end
 get "/article/:article_id" do
   article = Misty::Dyn::get_article_by_id( params[:article_id] )
   summary_analysis = article.get_summary_analysis()
-  pp article.get_body()
-  erb :article, :locals => { :article => article, :summary_analysis => summary_analysis }
+  tag_objects = article.get_line_tags
+  erb :article, :locals => { :tag_objects => tag_objects, :article => article, :summary_analysis => summary_analysis }
 end
 
-post "/article/:article_id/add_bias" do
+post "/article/:article_id/tag" do
   article = Misty::Dyn::get_article_by_id( params[:article_id] )
-  pp params
-  Log.debug("Adding bias")
-  #summary_analysis = article.get_summary_analysis()
-  #erb :article, :locals => { :article => article, :summary_analysis => summary_analysis }
-  article.add_bias( params[:digest], params[:bias] )
+  Log.debug("Adding tag to article")
+  article.add_tag( params[:tag] )
   { :success => true }.to_json
+end
+
+post "/article/:article_id/line/:digest/tag" do
+  r = { :success => false }
+  if session.has_key?( 'user' )
+    Log.debug(format('Tagging article line for user: %s', session['user']['name']))
+    begin
+      article = Misty::Dyn::get_article_by_id( params[:article_id] )
+      article.tag_line( params[:digest], params[:tag_type], params[:tag_value], session['user'] )
+      r[:success] = true
+
+    rescue => e
+      Log.fatal(format('Unable to tag article line: %s', e ))
+      r[:reason] = e
+
+    end
+  end
+  r.to_json
+  { :success => true }.to_json
+end
+
+post "/article/:article_id/line/:digest/vote" do
+  r = { :success => false }
+  if session.has_key?( 'user' )
+    Log.debug(format('Voting article line for user: %s', session['user']['name']))
+    begin
+      article = Misty::Dyn::get_article_by_id( params[:article_id] )
+      article.vote_line( params[:digest], params[:direction], session['user'] )
+      r[:success] = true
+    rescue => e
+      Log.fatal(format('Unable to upvote: %s', e ))
+      r[:reason] = e
+    end
+  end
+  r.to_json
 end
 
 get "/article/:article_id/refresh" do

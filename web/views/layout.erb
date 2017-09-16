@@ -1,5 +1,6 @@
 <html>
 <body>
+<script type="text/javascript" src="//connect.facebook.net/en_US/sdk.js"></script>
 
 <script src="/js/jquery/jquery-3.2.1.js"></script>
 <script src="/js/jquery/jquery-ui.js"></script>
@@ -8,6 +9,34 @@
 <link rel="stylesheet" type="text/css" href="/css/jquery/jquery-ui.css" />
 <link rel="stylesheet" type="text/css" href="/css/jquery/jquery-ui.structure.css" />
 <link rel="stylesheet" type="text/css" href="/css/jquery/jquery-ui.theme.css" />
+
+<style>
+.header {
+  border: 1px solid #efefef;
+  text-align: right;
+}
+
+table.toolbar {
+  width:100%;
+}
+  table.toolbar .page_name {
+    text-align: left;
+    vertical-align: bottom;
+  }
+
+  table.toolbar .page_tools {
+    text-align: right;
+  }
+</style>
+
+<div class="header">
+  <span><a href="/">Home</a></span>
+  <span> <% if session['user'] %>
+    <%= session['user']['name'] %> <a href="/logout">Logout</a>
+  <% else %>
+    <a href="/login">Login</a>
+  <% end %></span>
+</div>
 
 <%= yield %>
 

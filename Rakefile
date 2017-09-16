@@ -225,8 +225,18 @@ namespace :topic do
 end
 
 namespace :topics do
+  desc "Update TS"
+  task :update_ts, :force do |t,args|
+    force = args[:force] == nil ? true : false
+    Log.debug(format('Force: %s', force))
+    topics = Misty::Dyn::get_topics( false )
+    topics.each do |topic|
+      topic.update_ts
+    end
+  end
+
   desc "Summarize language"
-  task :lang, :topic_id, :force do |t,args|
+  task :lang, :force do |t,args|
     force = args[:force] == nil ? true : false
     Log.debug(format('Force: %s', force))
     topics = Misty::Dyn::get_topics( false )
@@ -259,9 +269,7 @@ namespace :topics do
     long_timer = true if args[:long] != nil
 
     topics = Misty::Dyn::get_topics
-    topics.each do |topic|
-      #next if topic.topic_id == 'ca0b186cee4df7782b6555e0904ff80385336cca'
-
+    topics.sort{|a,b| b.created_ts <=> a.created_ts }.each do |topic|
 			url = topic.scrape_url
       next if url == nil
 
@@ -375,8 +383,8 @@ namespace :article do
     article = Misty::Article::get_by_url( args[:url] )
     if article.process_page( args[:url], args[:key] )
       article.analyze_language( false )
-      article.save( true )
-      Misty::nap( 'Article save', args[:long] )
+      article.save( false )
+      # Misty::nap( 'Article save', args[:long] )
     end
   end
 end

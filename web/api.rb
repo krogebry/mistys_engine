@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 require 'pp'
 require 'json'
+require 'koala'
 require 'logger'
 require 'aws-sdk'
 require 'sinatra'
@@ -10,7 +11,6 @@ LIB_DIR = File.expand_path(File.join(File.dirname(__FILE__), '..', 'libs'))
 #exit
 
 require '../libs/cache.rb'
-#require '../libs/misty.rb'
 require format('%s/misty.rb', LIB_DIR)
 
 set :bind, '0.0.0.0'
@@ -18,12 +18,16 @@ set :port, ENV['PORT']
 enable :sessions
 enable :logging
 
+use Rack::Session::Cookie, :expire_after => 2592000,
+  secret: '/GzPoqpDMKgsBEj9wEdOCIcctATI4zu4PB/iwj3ghOYw2NrNaRpoWoGBa1lRtd93BFtWRDVjvjHrthk4NicZfXZmJncPYsfTSFR8rI9ZYfmBtiedX6uc4E44clonFUSJ'
+
 begin
   Log = Logger.new(STDERR)
+  Tags = Misty::Tags.new()
   Cache = DevOps::Cache.new()
 
 rescue => e
-  Log.fatal("Failed to create logger") 
+  Log.fatal(format('Failed to create logger: %s', e))
   exit
 
 end

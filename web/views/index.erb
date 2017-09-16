@@ -1,19 +1,57 @@
-<h1>Topics</h1>
+<% now = Time.new.to_f %>
+<style>
+.week_header{
+  background-color: #efefef;
+}
+table th{
+  text-align: left;
+}
+</style>
 
-<div>
-  <span><a href="/topic/create">Create topic</a></span>
-  | <span><a href="/topics/refresh">Refresh</a></span>
-</div>
+<table class="toolbar">
+<tr>
+  <td style="width: 50%;"><h1>Topics</h1></td>
+  <td style="text-align: right;">
+    <div class="sub_header">
+      <span><a href="/topic/create">Create topic</a></span>
+      | <span><a href="/topics/refresh">Refresh</a></span>
+    </div>
+  </td>
+</tr>
+</table>
 
 <table id="topics" class="display" cellspacing="0" width="100%">
 	<tr>
   	<th>Name</th>
-    <th>Num articles</th>
+    <th>Created</th>
+    <th>Num interesting things</th>
   </tr>
 
-  <% topics.each do |topic| %>
+  <tr> <td colspan="3" class="week_header">This week</td> </tr>
+  <% topics.sort{|a,b| b.created_ts <=> a.created_ts }.select{|t| (now - t.created_ts) < (7*86400) }.each do |topic| %>
   <tr>
-    <td><a href="/topic/<%= topic['topic_id'] %>"><%= topic['topic_name'] %></a></td>
+    <td><a href="/topic/<%= topic.topic_id %>"><%= topic.topic_name %></a></td>
+    <td><%= Time.at( topic.created_ts ) %></td>
+    <td>0</td>
+  </tr>
+  <% end %>
+
+  <tr> <td colspan="3" class="week_header">Last week</td> </tr>
+  <% topics.sort{|a,b| b.created_ts <=> a.created_ts }.select{|t| 
+    (now - t.created_ts) > (7*86400) && (now - t.created_ts) < (14*86400)
+  }.each do |topic| %>
+  <tr>
+    <td><a href="/topic/<%= topic.topic_id %>"><%= topic.topic_name %></a></td>
+    <td><%= Time.at( topic.created_ts ) %></td>
+    <td>0</td>
+  </tr>
+  <% end %>
+
+  <tr> <td colspan="3" class="week_header">Older</td> </tr>
+  <% topics.sort{|a,b| b.created_ts <=> a.created_ts }.select{|t| (now - t.created_ts) > (14*86400) }.each do |topic| %>
+  <tr>
+    <td><a href="/topic/<%= topic.topic_id %>"><%= topic.topic_name %></a></td>
+    <td><%= Time.at( topic.created_ts ) %></td>
     <td>0</td>
   </tr>
   <% end %>

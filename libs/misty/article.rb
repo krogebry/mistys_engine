@@ -65,10 +65,63 @@ module Misty
       uri.host
     end
 
-    def add_bias( digest, bias )
-      line = get_body.select{|b| b['digest'] == digest }.first
-      line['bias'] ||= []
-      line['bias'].push( bias )
+    def get_tags_for_line( digest )
+      tags = Misty::Dyn::get_object_tags( Misty::Dyn::OBJECT_TYPE_ARTICLE_LINE, digest )
+      tags['tags']
+    end
+
+    def get_line_tags()
+      digests = @data['article']['body'].map{|b| format('%s-%s', @article_id, b['digest'] )}
+      tags = Misty::Dyn::get_batch_object_tags( Misty::Dyn::OBJECT_TYPE_ARTICLE_LINE, digests)
+      tags['responses']['misty_dev_object_tags']
+    end
+
+    def tag_line( digest, tag_type, tag_value, user )
+      Misty::Dyn::tag_object( 
+        Misty::Dyn::OBJECT_TYPE_ARTICLE_LINE, 
+        format('%s-%s', @article_id, digest),
+        user['id'], 
+        tag_type, tag_value )
+    end
+
+    def vote_line( digest, direction, user )
+      if direction == 'up'
+        Misty::Dyn::tag_object( 
+          Misty::Dyn::OBJECT_TYPE_ARTICLE_LINE, 
+          format('%s-%s', @article_id, digest),
+          user['id'], 
+          Misty::Dyn::OBJECT_TAG_TYPE_VOTE, 'up' )
+
+      elsif direction == 'down'
+        Misty::Dyn::upvote_object( 
+          Misty::Dyn::OBJECT_TYPE_ARTICLE_LINE, 
+          format('%s-%s', @article_id, digest),
+          user['id'], 
+          Misty::Dyn::OBJECT_TAG_TYPE_VOTE, 'down' )
+
+      else
+        raise Exception.new(format('Unknown direction: %s', direction))
+
+      end
+    end
+
+    # def add_tag_to_line( digest, bias )
+      # line = get_body.select{|b| b['digest'] == digest }.first
+      # line['tags'] ||= []
+      # line['tags'].push( bias )
+      # save( true )
+    # end
+
+    #def add_tag( tag )
+      #@data['tags'] ||= []
+      #@data['tags'].push tag
+      #save( true )
+    #end
+
+    def rm_biases
+      get_body.select{|b| b.has_key?( 'bias' )}.each do |l|
+        l['bias'] = []
+      end
       save( true )
     end
 
@@ -83,19 +136,21 @@ module Misty
       bias_list
     end
 
-    def rm_biases
-      get_body.select{|b| b.has_key?( 'bias' )}.each do |l|
-        l['bias'] = []
-      end
-      save( true )
-    end
-
     def get_entire_body
-      str = get_body.map{|b| b['body'] }.join( ' ' )
-      str.gsub!( /\t/, '' )
-      str.gsub!( /\r\n/, '')
-      str.gsub!( /#{[0x201D].pack("U")}/, '"' )
-      str.gsub!( /#{[0x201C].pack("U")}/, '"' )
+      str = get_body.map{|b| b['body'] }.join( ' ' ).encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
+      begin
+        str.gsub!( /\t/, '' )
+        str.gsub!( /\r\n/, '')
+        str.gsub!( /#{[0x201D].pack("U")}/, '"' )
+        str.gsub!( /#{[0x201C].pack("U")}/, '"' )
+        str.gsub!( /`/, '"' )
+
+      rescue => e
+        Log.fatal(format('Invalid body string: %s', e ))
+        pp str
+        exit
+
+      end
       str
     end
 
@@ -124,8 +179,10 @@ module Misty
     end
 
     def get_page( url )
-      Log.debug('Getting page: %s' % url)
-      data = Cache.cached(format( 'url_%s', @article_id )) do
+      cache_key = format( 'url_%s', @article_id )
+      Log.debug(format('Getting page: %s (%s)', url, cache_key))
+      #Cache.del_key( cache_key )
+      data = Cache.cached(cache_key) do
         begin
           headers = get_headers
           #r = RestClient.get( url, :headers => headers, :verify_ssl => false )
@@ -434,93 +491,104 @@ module Misty
     end
 
     def get_body_el( xml )
-      el = xml.css( "//div[@class*=entry-content]/p" )
-      if el.size > 0
-        Log.debug(format('(1) Found body elements %i', el.size).yellow)
-        handle_body_elements( el )
-        return true
-      end
+      queries = [
+        '//div[@class*=entry-content]/p',
+        '//div[@itemprop=articleBody]/p',
+        '//div[@class=mod-content]/p',
+        '//div[@id=article]/p',
+        '//div[@id=story_body]/p',
+        '//div[@class*=article]/p',
+        '//div[@class*=body]/p',
+        '//div[@class=body-text]',
+        '//div[@class=art-story__text]/p',
+        '//div[@class*=sp-text]/p',
+        '//div[@class=field-items]/div/p',
+        '//div[@class=pdb-story]/p',
+        '//div[@class=ctx_content]/p',
+        '//div[@class=ug_page]/p',
+        '//div[@id=storyContent]/p',
+        '//div[@class*=field-name-body]/p',
+        '//div[@class=content]/p',
+        '//div[@class*=article-content]/p',
+        '//div[@id=post-body]/p',
+        '//div[@class=article-body]/p',
+        '//div[@class=txtInWrapper]/p',
+        '//div[@class=story-transcript]/p',
+        '//div[@id=WNStoryBody]/p',
+        '//div[@class=articleContent]/p',
 
-      el = xml.css( "//div[@itemprop=articleBody]/p" )
-      if el.size > 0
-        Log.debug(format('(2) Found body elements %i', el.size).yellow)
-        handle_body_elements( el )
-        return true
-      end
+        '//article[@class*=post-article]/p',
+        '//article/p',
+        '//article/div/p',
 
-      el = xml.css( "//div[@id=article]/p" )
-      if el.size > 0
-        Log.debug(format('(3) Found body elements %i', el.size).yellow)
-        handle_body_elements( el )
-        return true
-      end
+        '//section[@class*=entry-content]/p',
+        '//section[@class=text-description]/p'
+      ]
 
-      el = xml.css( "//section[@class*=entry-content]/p" )
-      if el.size > 0
-        Log.debug(format('(4) Found body elements %i', el.size).yellow)
-        handle_body_elements( el )
-        return true
+      queries.each do |q|
+        el = xml.css( q )
+        if el.size > 0
+          Log.debug(format('Found %i body elements with %s', el.size, q).green)
+          handle_body_elements( el )
+          return true
+        end
       end
 
       return false
     end
 
     def get_title_el( xml )
-      el = xml.css( "//meta[@name=description]" )
-      if el.size == 1
-        Log.debug('(1) Found title'.yellow)
-        v = el.first.attributes['content'].value
-        if v != ""
-          @data['article']['title'] = v
-          return true
+      queries = [
+        '//meta[@name=description]',
+        '//meta[@itemprop=description]',
+        '//h1[@itemprop=headline]',
+        '//h1[@class=entry-title]',
+        '//title'
+      ]
+
+      queries.each do |q|
+        el = xml.css( q )
+        if el.size == 1
+          Log.debug(format('Found %i title with %s', el.size, q).green)
+          #pp el
+          if el.first.children.size == 1
+            text = el.first.children.first.text
+            @data['article']['title'] = text
+            return true
+
+          else
+            #pp el
+            if el.first.name == 'h1'
+              text = el.text.gsub( /\t/, '' ).gsub( /\n/, '' )
+              @data['article']['title'] = text
+            else
+              if el.first.attributes.has_key? 'content'
+                v = el.first.attributes['content'].value
+                if v != ""
+                  @data['article']['title'] = v
+                  return true
+                end
+              end
+            end
+
+          end
         end
-      end
-
-      el = xml.css( "//meta[@itemprop=description]" )
-      if el.size == 1
-        Log.debug('(2) Found title'.yellow)
-        v = el.first.attributes['content'].value
-        if v != ""
-          @data['article']['title'] = v
-          return true
-        end
-      end
-
-      el = xml.css( "//h1[@itemprop=headline]" )
-      if el.size == 1
-        Log.debug('(3) Found title'.yellow)
-        @data['article']['title'] = el.first.text
-        return true
-      end
-
-      el = xml.css( "//h1[@class=entry-title]" )
-      if el.size == 1
-        Log.debug('(4) Found headline'.yellow)
-        @data['article']['title'] = el.first.text
-        return true
-      end
-
-      el = xml.css( "//title" )
-      if el.size == 1
-        Log.debug('(5) Found headline'.yellow)
-        @data['article']['title'] = el.first.text
-        return true
       end
 
       return false
     end
 
 		def analyze( topic, line, force=false )
-      # Log.debug(format('Running analisis for %s', line))
   		cache_key = format('ml_%s_%s', topic, Digest::SHA1.hexdigest( line ))
+      Log.debug(format('Running analisis for %s', cache_key))
       Cache.del_key( cache_key ) if force == true
   		Cache.cached_json( cache_key ) do
     		encoded = line.to_ascii.gsub( /"/, "'" )
     		cmd_ml = format('gcloud ml language analyze-%s --content="%s"', topic, encoded)
     		# Log.debug('CMD(ml): %s' % cmd_ml)
     		res = `#{cmd_ml}`
-    		if res.match( /ERROR/ )
-      		Log.fatal("Unable to parse because of some stupid ass bullshit.")
+    		if res.match( /^ERROR/ )
+      		Log.fatal(format('Unable to parse because of some stupid ass bullshit: %s', res))
       		exit
       		res = {}
     		end
@@ -563,9 +631,11 @@ module Misty
         save_summary = true
       end
 
-      if !summary_analysis.has_key?( 'sentiment' ) 
+      #if !summary_analysis.has_key?( 'sentiment' ) 
+      if !summary_analysis.has_key?( 'sentiment' ) || summary_analysis['sentiment'] == nil || summary_analysis['sentiment'].size == 0
         Log.debug(format('Running sentiment analysis').yellow)
         summary_analysis['sentiment'] = analyze_body_sentiment
+        # pp summary_analysis
 
         @score = summary_analysis['sentiment']['documentSentiment']['score']
         @magnitude = summary_analysis['sentiment']['documentSentiment']['magnitude']
@@ -574,7 +644,8 @@ module Misty
         save_summary = true
       end
 
-      if !summary_analysis.has_key?( 'syntax' ) || summary_analysis['syntax'] == nil
+      #if !summary_analysis.has_key?( 'syntax' ) || summary_analysis['syntax'] == nil
+      if !summary_analysis.has_key?( 'syntax' ) || summary_analysis['syntax'] == nil || summary_analysis['syntax'].size == 0
         Log.debug(format('Running syntax analysis').yellow)
         syntax = analyze_body_syntax( false )
         summary_analysis['syntax'] = syntax
@@ -604,7 +675,7 @@ module Misty
 
     def analyze_body_sentiment( force=false )
       return false if !has_body?
-      analyze( 'sentiment', get_entire_body )
+      analyze( 'sentiment', get_entire_body, force )
     end
 
     def emote

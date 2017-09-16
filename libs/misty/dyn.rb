@@ -8,6 +8,87 @@ module Misty
 
   class Dyn < DataStore
 
+    OBJECT_TYPE_TOPIC = 'topic'
+    OBJECT_TYPE_ARTICLE = 'article'
+    OBJECT_TYPE_ARTICLE_LINE = 'article_line'
+
+    OBJECT_TAG_TYPE_VOTE = 'vote'
+    OBJECT_TAG_TYPE_EMOTION = 'emotion'
+    OBJECT_TAG_TYPE_FAVORITE = 'favorite'
+
+    def self.get_object_tags( object_type, object_id, force=false )
+      object_key = format('%s-%s', object_type, object_id)
+      cache_key = 'topics_dev_object_tags_%s' % object_key
+      Cache.del_key( cache_key ) if force == true
+      data = Cache.cached_json( cache_key ) do
+        query = {
+          index_name: 'object_key-index',
+          table_name: format('misty_%s_object_tags', ENV['MISTY_ENV_NAME']),
+          expression_attribute_values: { ':v1' => object_key }, 
+          key_condition_expression: 'object_key = :v1'
+        }
+        DynamoClient.query( query ).data.to_h.to_json
+      end
+
+      if data['items'].size == 0
+        { 
+          'tags' => [],
+          'object_id' => object_id,
+          'object_key' => format('%s-%s', object_type, object_id),
+          'object_type' => object_type
+        }
+      else
+        data['items'].first
+      end
+
+    end
+
+    def self.get_batch_object_tags( object_type, object_ids, force=false )
+      object_key = format('%s-%s', object_type, Misty::Dyn::digest( object_ids.join() ))
+      cache_key = format('topics_dev_object_tags_%s', object_key)
+      Cache.del_key( cache_key ) if force == true
+
+      data = Cache.cached_json( cache_key ) do
+        table_name = format('misty_%s_object_tags', ENV['MISTY_ENV_NAME'])
+        query = {
+          request_items: {
+            table_name => {
+              keys: object_ids.map{|id| { 'object_id' => id }}
+            }
+          }
+        }
+
+        # pp query
+
+        DynamoClient.batch_get_item( query ).data.to_h.to_json
+      end
+      data
+    end
+
+    def self.tag_object( object_type, object_id, user_id, tag_type, tag_value )
+      #object_key = format('%s-%s', object_type, object_id)
+
+      tag_object = get_object_tags( object_type, object_id, true )
+
+      tag_object['tags'] ||= []
+      tag_object['tags'].push({
+        'user_id' => user_id,
+        'tag_type' => tag_type,
+        'tag_value' => tag_value,
+        'created_ts' => Time.new.to_f
+      })
+
+      # pp tag_object
+
+      DynamoClient.put_item({
+        item: tag_object,
+        table_name: format('misty_%s_object_tags', ENV['MISTY_ENV_NAME'])
+      })
+
+      cache_key = 'topics_dev_object_tags_%s' % tag_object['object_key']
+      Cache.del_key( cache_key ) 
+    end
+
     def self.digest( str )
       Digest::SHA1.hexdigest( str )
     end
@@ -36,7 +117,7 @@ module Misty
           body: doc[k].to_json,
           bucket: 'mistysengine'
         })
-        # Misty::nap( 'Saving' )
+        Misty::nap( 'Saving s3 object' )
       end
 
       get_article_analysis( doc['article_id'], doc['digest'], true )
@@ -59,6 +140,7 @@ module Misty
             }) do |chunk|
               object << chunk
             end
+            Misty::nap( 'Getting s3 object' )
 
           rescue Aws::S3::Errors::NoSuchKey => e
             # Log.debug(format('No key: %s', e).red)
@@ -67,7 +149,6 @@ module Misty
           end
           object
         end
-
         return_data[k] = data
       end
       return_data
@@ -96,7 +177,6 @@ module Misty
       end
       data['items'].first
     end
-
 
     def self.save_topic( topic )
       DynamoClient.put_item({

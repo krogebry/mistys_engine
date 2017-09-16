@@ -1,0 +1,25 @@
+---
+tags:
+  - name: 'emof'
+    type: 'emotional'
+    display: 'Emotional misrepresentation of facts'
+    description: 'Intentionally misleading things.'
+  - name: 'emp'
+    type: 'emotional'
+    display: 'Emotional presentation'
+    description: 'Specifically and intentionally diesigned to illict feelings.'
+
+  - name: 'lf-adh'
+    type: 'logical_falicy'
+    display: 'Ad hominom'
+    description: 'Attacking the charchter, not the argument'
+  - name: 'lf-strawman'
+    type: 'logical_falicy'
+    display: 'Straw man'
+    description: 'Presenting an exageration of facts to make the argument easier to attack.'
+
+  - name: 'irr'
+    type: 'misc'
+    display: 'Irrelevant line'
+    description: 'Not pertaining to the story.'
+

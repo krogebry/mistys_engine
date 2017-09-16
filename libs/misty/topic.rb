@@ -3,9 +3,11 @@ require 'unidecoder'
 module Misty
 
   class Topic
-    @topic
+    @data
     @topic_id
     @topic_name
+
+    @created_ts
 
     @scrape_url
 
@@ -13,6 +15,7 @@ module Misty
   		DynamoClient.put_item({
     		item: {
       		topic_id: Digest::SHA1.hexdigest( topic_name ),
+          created_ts: Time.new.to_f,
       		scrape_url: topic_scrape_url,
       		topic_name: topic_name
     		},
@@ -21,25 +24,33 @@ module Misty
   		Cache.del_key(format('topics_%s', ENV['MISTY_ENV_NAME'] ))
 		end
 
-    attr_accessor :topic_id, :topic_name, :scrape_url
+    attr_accessor :topic_id, :topic_name, :scrape_url, :created_ts
     def initialize( data )
-      @topic = data
-      @topic_id = data['topic_id']
-      @topic_name = data['topic_name']
+      @data = data
+      @topic_id = @data['topic_id']
+      @topic_name = @data['topic_name']
 
-      @scrape_url = data['scrape_url'] if data.has_key?( 'scrape_url' )
+      @created_ts = @data['created_ts'].to_f if @data.has_key? 'created_ts'
+      @scrape_url = @data['scrape_url'] if @data.has_key? 'scrape_url'
     end
 
     def get_articles( force=false )
       Dyn::get_articles_by_topic_id( @topic_id, force )
     end
 
+    def update_ts
+      if @created_ts == nil
+        @data['created_ts'] = Time.new.to_f 
+        save
+      end
+    end
+
     def has_summary?
-      @topic.has_key?( 'summary' )
+      @data.has_key?( 'summary' )
     end
 
     def get_summary
-      @topic['summary']
+      @data['summary']
     end
 
     def has_summary_for_article?( article_id )
@@ -114,11 +125,11 @@ module Misty
         end
       end
 
-      @topic['summary'] = article_summaries
+      @data['summary'] = article_summaries
     end
 
     def save
-      Dyn::save_topic( @topic )
+      Dyn::save_topic( @data )
       Misty::nap( 'topic save' )
     end
 

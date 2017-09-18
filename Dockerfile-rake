@@ -1,0 +1,9 @@
+FROM ruby:2.4
+
+COPY ./Gemfile /opt/misty/
+WORKDIR /opt/misty/
+RUN bundle update
+
+COPY ./ /opt/misty/
+
+# ENTRYPOINT [ "rake" ]

@@ -59,9 +59,19 @@ $(document).ready(function(){
 </tr>
 </table>
 
+<% if topic_occurance_map != nil %>
+<table id="topic_occurance_map">
+  <% topic_occurance_map['map'].sort{|a,b| b[1]['refs'].size <=> a[1]['refs'].size }.to_h.each do |digest, i| %>
+  <tr>
+    <td><%= i['refs'].size %></td>
+    <td><%= i['body'] %></td>
+  </tr>
+  <% end %>
+</table>
+<% end %>
+
 <table id="topics" class="display" cellspacing="0" width="100%">
   <tr>
-    <th>Bias</th>
     <th>Title</th>
     <th>Source</th>
     <th>Score</th>
@@ -71,9 +81,6 @@ $(document).ready(function(){
   <% articles.sort{|a,b| b.magnitude <=> a.magnitude }.each do |article| %>
   <% next if !article.has_body? %>
   <tr class="data">
-    <td><% article.get_biases.each do |bias, cnt| %>
-      <span><%= bias %>(<%= cnt %>)</span>
-    <% end %></td>
     <td><a href="/article/<%= article.article_id %>"><%= article.get_title %></a></td>
     <td> <a href="<%= article.url %>" target="_new"> <%= article.source %> </a> </td>
     <td><%= "%.3f" % article.score.to_f %></td>

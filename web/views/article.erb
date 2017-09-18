@@ -68,43 +68,6 @@ $(document).ready(function(){
     })
   });
 
-  /**
-  function addTag() {
-    var valid = true;
-    var selected_val = $("#tag_type option:selected").val();
-    $.ajax({ 
-      url: "/article/<%= article.article_id %>/line/"+ line_id +"/tag",
-      data: {
-        tag: selected_val,
-      },
-      method: 'post',
-      complete: function( res, s ){
-        window.location = window.location
-      }
-    });
-
-  };
-  */
-
-  /**
-  var dialog = $( "#dialog-form" ).dialog({
-    modal: true,
-    width: 350,
-    height: 200,
-    autoOpen: false,
-    buttons: {
-      "Create tag": addTag,
-      Cancel: function() {
-        dialog.dialog( "close" );
-      }
-    },
-    close: function() {
-      // allFields.removeClass( "ui-state-error" );
-      dialog.dialog( "close" );
-    }
-  });
-  */
-
   $( ".create-tag" ).button().on( "click", function( e ) {
     line_id = $(e.target).attr('id');
     //console.log( $(e).attr('id') );
@@ -118,14 +81,19 @@ $(document).ready(function(){
   });
 
   $(".tagger select").on( "change", function( e ){
-    var line_id = $(e.target).attr('digest');
-    var tag_type = $(e.target).attr('tag_type');
-    var tag_value = $("#"+ $(e.target).attr('id') +" option:selected").val();
-    console.log( tag_value );
+    var el = $(e.target);
+    var digest = el.attr('digest');
+    var line_id = el.attr('line_id'); 
+
+    var tag_type = el.attr('tag_type');
+    var tag_value = $("#"+ el.attr('id') +" option:selected").val();
+
+    //console.log( tag_value );
 
     $.ajax({ 
-      url: "/article/<%= article.article_id %>/line/"+ line_id +"/tag",
+      url: "/article/<%= article.article_id %>/line/"+ digest +"/tag",
       data: {
+        line_id: line_id,
         tag_type: tag_type,
         tag_value: tag_value,
       },
@@ -180,19 +148,44 @@ table .line_details {
     border: 1px solid red;
   }
 
+  table td.body_opts{
+    width: 20px;
+  }
+
+  table td.body_line{
+    padding: 4px;
+  }
+
+  table td.occ_none{ border: 1px solid #ffffff; }
+  table td.occ_low{ border: 1px solid #efefef; }
+  table td.occ_medium{ border: 1px solid #afafaf; }
+  table td.occ_high{ border: 1px solid #000000; }
+
 </style>
 
 <table id="body" class="display" cellspacing="0" width="100%">
 <% article.get_body.each do |line| %>
+<% occ = topic_occurance_map['map'].has_key?( line['digest'] ) ? topic_occurance_map['map'][line['digest']]['refs'].size : 0 %>
+<% occ_level = if occ > 0 && occ < 4
+  'occ_low'
+elsif occ >= 4 && occ < 7
+  'occ_medium'
+elsif occ >= 7
+  'occ_high'
+else
+  'occ_none'
+end
+%>
 <tr>
-  <td><span id="<%= line['digest'] %>" class="expander">Expand</span></td>
-	<td><div class="article_line"> <%= line['body'] %></td>
+  <td class="body_opts"><span id="<%= line['digest'] %>" class="expander">></span></td>
+	<td class="body_line <%= occ_level %>"><%= line['body'] %></td>
+
 </tr><tr>
   <td colspan="2" class="data" id="data_<%= line['digest'] %>">
   <table class="line_details">
   <tr>
     <td>
-      <% tag_objects.select{|t| t['object_id'] == format('%s-%s', article.article_id, line['digest'] )}.each do |to| %>
+      <% tag_objects.select{|t| t['object_id'] == format('%s-%i-%s', article.article_id, line['line_id'].to_i, line['digest'] )}.each do |to| %>
       <% to['tags'].select{|t| t['tag_type'] == 'emotional' }.each do |tag| %>
   	    <span class="tag ui-corner-all"><%= tag['tag_value'] %> <span class="tag_rm">[x]</span> </span>
       <% end %>
@@ -208,7 +201,7 @@ table .line_details {
       <% if session['user'] %>
       <fieldset>
         <span>Misc:</span>
-        <select id="tag_misc_<%= line['digest'] %>" digest="<%= line['digest'] %>" tag_type="misc" name="tag_type" class="text ui-widget-content ui-corner-all"> 
+        <select id="tag_misc_<%= line['digest'] %>" line_id="<%= line['line_id'].to_i %>" digest="<%= line['digest'] %>" tag_type="misc" name="tag_type" class="text ui-widget-content ui-corner-all"> 
           <option selected value="nil">Select</option>
           <% Tags.get_tags( 'misc' ).each do |tag| %>
             <option value="<%= tag['name'] %>"><%= tag['display'] %></option>
@@ -218,7 +211,7 @@ table .line_details {
 
       <fieldset>
         <span>Logical falicy:</span>
-        <select id="tag_lf_<%= line['digest'] %>" digest="<%= line['digest'] %>" tag_type="logical_falicy" name="tag_type" class="text ui-widget-content ui-corner-all"> 
+        <select id="tag_lf_<%= line['digest'] %>" line_id="<%= line['line_id'].to_i %>" digest="<%= line['digest'] %>" tag_type="logical_falicy" name="tag_type" class="text ui-widget-content ui-corner-all"> 
           <option selected value="nil">Select</option>
           <% Tags.get_tags( 'logical_falicy' ).each do |tag| %>
             <option value="<%= tag['name'] %>"><%= tag['display'] %></option>
@@ -228,7 +221,7 @@ table .line_details {
 
       <fieldset>
         <span>Emotional:</span>
-        <select id="tag_emote_<%= line['digest'] %>" digest="<%= line['digest'] %>" tag_type="emotional" name="tag_type" class="text ui-widget-content ui-corner-all"> 
+        <select id="tag_emote_<%= line['digest'] %>" line_id="<%= line['line_id'].to_i %>" digest="<%= line['digest'] %>" tag_type="emotional" name="tag_type" class="text ui-widget-content ui-corner-all"> 
           <option selected value="nil">Select</option>
           <% Tags.get_tags( 'emotional' ).each do |tag| %>
             <option value="<%= tag['name'] %>"><%= tag['display'] %></option>
@@ -252,17 +245,3 @@ table .line_details {
 </tr>
 <% end %>
 </table>
-
-          <!--
-          <option selected value="emof">Emotional misrepresentation of facts</option>
-          <option value="ir">Intentional redirection</option>
-          <option value="sof">Statement of fact</option>
-          <option value="irr">Irrelevant</option>
-          <option value="mof">Misrepresentation of facts</option>
-          <option value="ep">Emotional presentation</option>
-          <option value="fq">False quote</option>
-          <option value="nc">Name calling</option>
-          <option value="qf">Questionable fact, possibly bullshit</option>
-          <option value="vl">Victum language</option>
-          -->
-

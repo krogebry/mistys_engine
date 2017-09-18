@@ -1,30 +1,39 @@
 #!/usr/bin/env ruby
 require 'pp'
 require 'json'
+#require 'dalli'
 require 'koala'
 require 'logger'
 require 'aws-sdk'
 require 'sinatra'
 require 'colorize'
+#require 'rack/session/dalli' 
+require 'redis-rack'
+require 'redis-store'
+#require 'sinatra/reloader'
+require "rack/session/redis"
 
 LIB_DIR = File.expand_path(File.join(File.dirname(__FILE__), '..', 'libs'))
-#exit
 
 require '../libs/cache.rb'
 require format('%s/misty.rb', LIB_DIR)
 
 set :bind, '0.0.0.0'
 set :port, ENV['PORT']
-enable :sessions
 enable :logging
-
-use Rack::Session::Cookie, :expire_after => 2592000,
-  secret: '/GzPoqpDMKgsBEj9wEdOCIcctATI4zu4PB/iwj3ghOYw2NrNaRpoWoGBa1lRtd93BFtWRDVjvjHrthk4NicZfXZmJncPYsfTSFR8rI9ZYfmBtiedX6uc4E44clonFUSJ'
 
 begin
   Log = Logger.new(STDERR)
   Tags = Misty::Tags.new()
   Cache = DevOps::Cache.new()
+
+  use Rack::Session::Redis, 
+    :key => 'rack.session',
+    :path => '/',
+    :secret => '/GzPoqpDMKgsBEj9wEdOCIcctATI4zu4PB/iwj3ghOYw2NrNaRpoWoGBa1lRtd93BFtWRDVjvjHrthk4NicZfXZmJncPYsfTSFR8rI9ZYfmBtiedX6uc4E44clonFUSJ',
+    :namespace => 'mistyengine',
+    :redis_server => format('redis://%s:6379/0', ENV['CACHE_HOSTNAME']),
+    :expire_after => 2592000
 
 rescue => e
   Log.fatal(format('Failed to create logger: %s', e))

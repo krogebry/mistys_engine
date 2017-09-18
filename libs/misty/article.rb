@@ -16,7 +16,6 @@ module Misty
     @magnitude
 
     attr_accessor :article_id, :source, :magnitude, :score, :article, :data, :url, :topic_id
-    #def initialize( topic_id, url )
     def initialize( data=nil )
       self.load( data )
     end
@@ -71,9 +70,19 @@ module Misty
     end
 
     def get_line_tags()
-      digests = @data['article']['body'].map{|b| format('%s-%s', @article_id, b['digest'] )}
-      tags = Misty::Dyn::get_batch_object_tags( Misty::Dyn::OBJECT_TYPE_ARTICLE_LINE, digests)
-      tags['responses']['misty_dev_object_tags']
+      digests = @data['article']['body'].map{|b| format('%s-%i-%s', @article_id, b['line_id'].to_f, b['digest'] )}
+      num_per_page = 99.0
+      ro_tags = []
+      page_offset = 0
+      num_pages = (digests.size.to_f / num_per_page) + 1.0
+      Log.debug(format('Num pages: %i - %i', num_pages, digests.size))
+      num_pages.to_i.times do |i|
+        pageable_digests = digests[page_offset, num_per_page]
+        tags = Misty::Dyn::get_batch_object_tags( Misty::Dyn::OBJECT_TYPE_ARTICLE_LINE, pageable_digests )
+        ro_tags.push tags['responses']['misty_dev_object_tags']
+        page_offset += num_per_page
+      end
+      ro_tags.flatten
     end
 
     def tag_line( digest, tag_type, tag_value, user )
@@ -105,53 +114,9 @@ module Misty
       end
     end
 
-    # def add_tag_to_line( digest, bias )
-      # line = get_body.select{|b| b['digest'] == digest }.first
-      # line['tags'] ||= []
-      # line['tags'].push( bias )
-      # save( true )
-    # end
-
-    #def add_tag( tag )
-      #@data['tags'] ||= []
-      #@data['tags'].push tag
-      #save( true )
-    #end
-
-    def rm_biases
-      get_body.select{|b| b.has_key?( 'bias' )}.each do |l|
-        l['bias'] = []
-      end
-      save( true )
-    end
-
-    def get_biases
-      bias_list = {}
-      get_body.select{|b| b.has_key?( 'bias' )}.each do |l|
-        l['bias'].each do |bias|
-          bias_list[bias] ||= 0
-          bias_list[bias] += 1
-        end
-      end
-      bias_list
-    end
-
     def get_entire_body
       str = get_body.map{|b| b['body'] }.join( ' ' ).encode('UTF-8', 'binary', invalid: :replace, undef: :replace, replace: '')
-      begin
-        str.gsub!( /\t/, '' )
-        str.gsub!( /\r\n/, '')
-        str.gsub!( /#{[0x201D].pack("U")}/, '"' )
-        str.gsub!( /#{[0x201C].pack("U")}/, '"' )
-        str.gsub!( /`/, '"' )
-
-      rescue => e
-        Log.fatal(format('Invalid body string: %s', e ))
-        pp str
-        exit
-
-      end
-      str
+      clean_string( str )
     end
 
     def has_body?
@@ -178,16 +143,21 @@ module Misty
       }
     end
 
-    def get_page( url )
+    def get_page( url, force=false )
       cache_key = format( 'url_%s', @article_id )
       Log.debug(format('Getting page: %s (%s)', url, cache_key))
-      #Cache.del_key( cache_key )
+      Cache.del_key( cache_key ) if force == true
+
       data = Cache.cached(cache_key) do
         begin
           headers = get_headers
           #r = RestClient.get( url, :headers => headers, :verify_ssl => false )
           r = RestClient::Request.execute(method: :get, url: url, headers: headers, verify_ssl: false)
           r.body
+
+        rescue RestClient::Gone => e
+          Log.fatal(format('Failed to get page: %s', e).red)
+          nil
 
         rescue RestClient::InternalServerError => e
           Log.fatal(format('Failed to get page: %s', e).red)
@@ -229,6 +199,12 @@ module Misty
       File.open( File.join( article_dir, format( '%s.json', article_key )), 'w' )
     end
 
+    def get_content_file( type, digest )
+      article_dir = File.join( '/mnt', 'data', 'cache' )
+      FileUtils.mkdir_p article_dir if !File.exists? article_dir
+      File.open(File.join(article_dir, format('gcloud_%s_%s', type, digest )), 'w' )
+    end
+
     def save( write_to_dyn=false )
       doc = {
         'url' => @url,
@@ -268,14 +244,51 @@ module Misty
       Cache.del_key( dyn_key )
     end
 
+    def clean_string( str )
+      begin
+        str = str.encode('UTF-8', invalid: :replace, undef: :replace, replace: '')
+        str.gsub!( /#{[0x00A0].pack("U")}/, '' )
+        str.gsub!( /\t/, '' )
+        str.gsub!( /\n/, '')
+        str.gsub!( / /, '') ## ord=160
+        str.gsub!( /^\s/, '')
+        str.gsub!( /^\s$/, '')
+        str.gsub!( /^-{1,}$/, '')
+        str.gsub!( /^_{1,}$/, '')
+        str.gsub!( /^—{1,}$/, '')
+        str.gsub!( /\r\n/, '')
+        str.gsub!( /#{[0x201D].pack("U")}/, '"' )
+        str.gsub!( /#{[0x201C].pack("U")}/, '"' )
+        str.gsub!( /`/, '"' )
+
+      rescue => e
+        Log.fatal(format('Problem cleaning string: %s', e))
+        pp str
+        pp e.backtrace
+        exit
+
+      end
+      str
+    end
+
     def handle_body_elements( elements )
       @data['article']['body'] ||= []
-      if @data['article']['body'].size == 0
-        @data['article']['body'] = elements.map{|el| { 
-          'body' => el.text,
-          'digest' => Digest::SHA1.hexdigest( el.text )
-        } if el.text != "" && el.text != " "}.compact
-      end
+      @data['article']['body'] = [] if @data['article']['body'].size > 0
+        i = 0
+        elements.each do |el|
+          next if el.text == "" || el.text == " "
+          body_str = clean_string( el.text )
+          next if body_str == "" || body_str == " "
+          digest = Misty::Dyn::digest( el.text )
+          h = {
+            'body' => body_str,
+            'digest' => digest,
+            'line_id' => i
+          }
+          @data['article']['body'].push h 
+          i+=1
+        end
+      #end
     end
 
     def handle_elements( type, elements )
@@ -284,7 +297,7 @@ module Misty
         handle_body_elements( elements )
 
       when 'title'
-        @data['article']['title'] = elements.first.text
+        @data['article']['title'] = clean_string( elements.first.text )
 
       when 'authors'
         @data['article']['authors'] = elements.map{|el| el.text if el.text != ""}.compact
@@ -493,15 +506,19 @@ module Misty
     def get_body_el( xml )
       queries = [
         '//div[@class*=entry-content]/p',
+        '//span[@id=articleContent]/p',
         '//div[@itemprop=articleBody]/p',
         '//div[@class=mod-content]/p',
+        '//div[@class=p402_premium]/p',
+        '//div[@class=content-area]/p',
+        '//div[@class=post-content]/p',
         '//div[@id=article]/p',
         '//div[@id=story_body]/p',
         '//div[@class*=article]/p',
-        '//div[@class*=body]/p',
         '//div[@class=body-text]',
         '//div[@class=art-story__text]/p',
         '//div[@class*=sp-text]/p',
+        '//div[@class=field-items]/div/div/p',
         '//div[@class=field-items]/div/p',
         '//div[@class=pdb-story]/p',
         '//div[@class=ctx_content]/p',
@@ -518,11 +535,14 @@ module Misty
         '//div[@class=articleContent]/p',
 
         '//article[@class*=post-article]/p',
+        '//article[@id=story-body]/div/p',
         '//article/p',
         '//article/div/p',
 
         '//section[@class*=entry-content]/p',
-        '//section[@class=text-description]/p'
+        '//section[@class=text-description]/p',
+
+        '//div[@class*=body]/p'
       ]
 
       queries.each do |q|
@@ -552,18 +572,19 @@ module Misty
           Log.debug(format('Found %i title with %s', el.size, q).green)
           #pp el
           if el.first.children.size == 1
-            text = el.first.children.first.text
+            text = clean_string( el.first.children.first.text )
             @data['article']['title'] = text
             return true
 
           else
             #pp el
             if el.first.name == 'h1'
-              text = el.text.gsub( /\t/, '' ).gsub( /\n/, '' )
+              text = clean_string( el.text )
               @data['article']['title'] = text
+
             else
               if el.first.attributes.has_key? 'content'
-                v = el.first.attributes['content'].value
+                v = clean_string( el.first.attributes['content'].value )
                 if v != ""
                   @data['article']['title'] = v
                   return true
@@ -579,19 +600,37 @@ module Misty
     end
 
 		def analyze( topic, line, force=false )
-  		cache_key = format('ml_%s_%s', topic, Digest::SHA1.hexdigest( line ))
-      Log.debug(format('Running analisis for %s', cache_key))
+      Log.debug(format('Entering analyze for %s', topic))
+
+      begin
+        #encoded = clean_string( line.to_ascii )
+        encoded = clean_string( line ).gsub( /"/, '\"' )
+        digest = Misty::Dyn::digest( encoded )
+
+      rescue => e
+        Log.fatal(format( 'Unable to properly encode body: %s', e ).red)
+        exit
+
+      end
+
+  		cache_key = format('ml_%s_%s', topic, digest )
       Cache.del_key( cache_key ) if force == true
+
   		Cache.cached_json( cache_key ) do
-    		encoded = line.to_ascii.gsub( /"/, "'" )
+        #f = get_content_file( topic, digest )
+        #f.puts( encoded )
     		cmd_ml = format('gcloud ml language analyze-%s --content="%s"', topic, encoded)
-    		# Log.debug('CMD(ml): %s' % cmd_ml)
+    		#cmd_ml = format('gcloud --format=json ml language analyze-%s --encoding-type="UTF8" --content-file="%s"', topic, File::absolute_path( f ))
+    		#Log.debug(format('CMD(ml): %s', cmd_ml))
     		res = `#{cmd_ml}`
+        #Log.debug('Checking res')
+
     		if res.match( /^ERROR/ )
       		Log.fatal(format('Unable to parse because of some stupid ass bullshit: %s', res))
       		exit
       		res = {}
     		end
+
         Misty::nap( 'after calling analyze' )
     		res
   		end
@@ -607,7 +646,6 @@ module Misty
       Log.debug(format('Running language analyisis on article: %s', @article_id))
 
       summary_analysis = get_summary_analysis
-      #Log.debug('Force: %s' % force )
       summary_analysis = nil if force == true
 
       digest = 'ALL_SUMMARY'
@@ -626,16 +664,12 @@ module Misty
       if !summary_analysis.has_key?( 'entities' ) || summary_analysis['entities'] == nil || summary_analysis['entities'].size == 0
         Log.debug(format('Running entities analysis').yellow)
         summary_analysis['entities'] = analyze_body_entities['entities']
-        #pp summary_analysis
-        #exit
         save_summary = true
       end
 
-      #if !summary_analysis.has_key?( 'sentiment' ) 
       if !summary_analysis.has_key?( 'sentiment' ) || summary_analysis['sentiment'] == nil || summary_analysis['sentiment'].size == 0
         Log.debug(format('Running sentiment analysis').yellow)
         summary_analysis['sentiment'] = analyze_body_sentiment
-        # pp summary_analysis
 
         @score = summary_analysis['sentiment']['documentSentiment']['score']
         @magnitude = summary_analysis['sentiment']['documentSentiment']['magnitude']
@@ -644,7 +678,6 @@ module Misty
         save_summary = true
       end
 
-      #if !summary_analysis.has_key?( 'syntax' ) || summary_analysis['syntax'] == nil
       if !summary_analysis.has_key?( 'syntax' ) || summary_analysis['syntax'] == nil || summary_analysis['syntax'].size == 0
         Log.debug(format('Running syntax analysis').yellow)
         syntax = analyze_body_syntax( false )
@@ -678,13 +711,13 @@ module Misty
       analyze( 'sentiment', get_entire_body, force )
     end
 
-    def emote
-      get_body.each do |body_el|
-        if body_el['body'].match( /mental state/ )
-          Log.debug( 'Found mental state' )
-        end
-      end
-    end
+    #def emote
+      #get_body.each do |body_el|
+        #if body_el['body'].match( /mental state/ )
+          #Log.debug( 'Found mental state' )
+        #end
+      #end
+    #end
 
   end
 end

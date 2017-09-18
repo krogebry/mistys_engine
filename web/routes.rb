@@ -14,6 +14,7 @@ get "/flush_cache" do
 end
 
 get "/fb_oauth_callback" do
+  pp session
   Log.debug(format('Code: %s', params[:code]).yellow)
   session['access_token'] = session['oauth'].get_access_token(params[:code])
 
@@ -91,16 +92,27 @@ end
 get "/topic/:topic_id" do
   topic = Misty::Dyn::get_topic_by_id( params[:topic_id] )
   articles = topic.get_articles
+
   subject_importance_map = Misty::Dyn::get_subject_importance_map( topic.topic_id )
   if subject_importance_map != nil
     subject_importance_map['map'] = subject_importance_map['map'].sort_by{|k,v| v['salience'].to_f }.reverse.to_h
   end
-  erb :topic, :locals => { :topic => topic, :articles => articles, :subject_importance_map => subject_importance_map }
+
+  topic_om = Misty::Dyn::get_topic_occurance_map( topic.topic_id )
+  # pp topic_om
+
+  erb :topic, :locals => { 
+    :topic => topic, 
+    :articles => articles, 
+    :topic_occurance_map => topic_om,
+    :subject_importance_map => subject_importance_map 
+  }
 end
 
 get "/topic/:topic_id/refresh" do
   topic = Misty::Dyn::get_topic_by_id( params[:topic_id], true )
 	articles = Misty::Dyn::get_articles_by_topic_id( params[:topic_id], true )
+  topic_om = Misty::Dyn::get_topic_occurance_map( topic.topic_id, true )
   subject_importance_map = Misty::Dyn::get_subject_importance_map( topic.topic_id, true )
   { :success => true }.to_json
 end
@@ -108,8 +120,18 @@ end
 get "/article/:article_id" do
   article = Misty::Dyn::get_article_by_id( params[:article_id] )
   summary_analysis = article.get_summary_analysis()
+
   tag_objects = article.get_line_tags
-  erb :article, :locals => { :tag_objects => tag_objects, :article => article, :summary_analysis => summary_analysis }
+  topic_om = Misty::Dyn::get_topic_occurance_map( article.topic_id ) 
+  topic_om ||= { 'map' => {} }
+  pp topic_om
+
+  erb :article, :locals => { 
+    :article => article, 
+    :tag_objects => tag_objects, 
+    :summary_analysis => summary_analysis,
+    :topic_occurance_map => topic_om
+  }
 end
 
 post "/article/:article_id/tag" do
@@ -125,7 +147,8 @@ post "/article/:article_id/line/:digest/tag" do
     Log.debug(format('Tagging article line for user: %s', session['user']['name']))
     begin
       article = Misty::Dyn::get_article_by_id( params[:article_id] )
-      article.tag_line( params[:digest], params[:tag_type], params[:tag_value], session['user'] )
+      digest_key = format('%i-%s', params[:line_id], params[:digest])
+      article.tag_line( digest_key, params[:tag_type], params[:tag_value], session['user'] )
       r[:success] = true
 
     rescue => e

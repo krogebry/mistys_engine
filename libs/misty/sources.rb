@@ -44,6 +44,10 @@ module Misty
       'authors' => ''
     },
 
+    #'theinsidercarnews.com' => {
+      #'body' => '//div[@class=field-items]/div/div/p'
+    #},
+
     'www.post-gazette.com' => {
       'disabled' => 'true'
     },

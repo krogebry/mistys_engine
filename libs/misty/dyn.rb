@@ -40,7 +40,6 @@ module Misty
       else
         data['items'].first
       end
-
     end
 
     def self.get_batch_object_tags( object_type, object_ids, force=false )
@@ -159,6 +158,30 @@ module Misty
         item: doc,
         table_name: 'misty_dev_article_analysis'
       })
+    end
+
+    def self.save_topic_occurance_map( doc )
+      DynamoClient.put_item({
+        item: doc,
+        table_name: format('misty_%s_topic_occurance_map', ENV['MISTY_ENV_NAME'])
+      })
+    end
+
+    def self.get_topic_occurance_map( topic_id, force=false )
+      query = {
+        index_name: 'topic_id-index',
+        table_name: format('misty_%s_topic_occurance_map', ENV['MISTY_ENV_NAME']),
+        expression_attribute_values: {
+          ':v1' => topic_id
+        }, 
+        key_condition_expression: 'topic_id = :v1' 
+      }
+      cache_key = format('misty_%s_topic_occurance_map_%s', ENV['MISTY_ENV_NAME'], topic_id)
+      Cache.del_key( cache_key ) if force == true
+      data = Cache.cached_json( cache_key ) do
+        DynamoClient.query( query ).data.to_h.to_json
+      end
+      data['items'].first
     end
 
     def self.get_subject_importance_map( topic_id, force=false )

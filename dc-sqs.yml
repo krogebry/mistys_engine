@@ -1,0 +1,50 @@
+---
+version: '2'
+services:
+  article_scan:
+    build:
+      context: .
+      dockerfile: Dockerfile-rake
+    volumes:
+      - /home/krogebry/.aws:/root/.aws
+      # - /home/krogebry/dev/mistys_engine:/opt/misty/
+    entrypoint: rake sqs:article_scan 
+    environment:
+      - USE_AWS_CREDS=true
+      - MISTY_ENV_NAME=dev
+      - AWS_PROFILE=default
+      - AWS_ACCOUNT_ID=903369196314
+      - AWS_DEFAULT_REGION=us-east-1
+      - CACHE_HOSTNAME=192.168.56.101
+
+  create_om:
+    build:
+      context: .
+      dockerfile: Dockerfile-rake
+    volumes:
+      - /home/krogebry/.aws:/root/.aws
+      # - /home/krogebry/dev/mistys_engine:/opt/misty/
+    entrypoint: rake sqs:create_om
+    environment:
+      - USE_AWS_CREDS=true
+      - MISTY_ENV_NAME=dev
+      - AWS_PROFILE=default
+      - AWS_ACCOUNT_ID=903369196314
+      - AWS_DEFAULT_REGION=us-east-1
+      - CACHE_HOSTNAME=192.168.56.101
+
+  create_sim:
+    build:
+      context: .
+      dockerfile: Dockerfile-rake
+    volumes:
+      - /home/krogebry/.aws:/root/.aws
+      # - /home/krogebry/dev/mistys_engine:/opt/misty/
+    entrypoint: rake sqs:create_sim
+    environment:
+      - USE_AWS_CREDS=true
+      - MISTY_ENV_NAME=dev
+      - AWS_PROFILE=default
+      - AWS_ACCOUNT_ID=903369196314
+      - AWS_DEFAULT_REGION=us-east-1
+      - CACHE_HOSTNAME=192.168.56.101

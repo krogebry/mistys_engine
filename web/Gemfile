@@ -1,7 +1,14 @@
 source 'https://rubygems.org'
 
+#gem 'dalli'
 gem 'koala'
 gem 'aws-sdk' 
 gem 'sinatra' 
 gem 'colorize'
 gem 'unidecoder'
+#gem 'rack-session-memcached'
+
+gem 'redis-rack'
+gem 'redis-store'
+
+gem 'sinatra-reloader'

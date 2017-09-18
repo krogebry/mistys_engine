@@ -1,16 +1,28 @@
 ---
 version: '2'
 services:
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  # web:
+    # build:
+      # context: .
+      # dockerfile: Dockerfile
+    # ports:
+      # - "8080:8080"
+    # volumes:
+      # - /home/krogebry/.aws:/root/.aws
+      # - /home/krogebry/dev/mistys_engine:/opt/misty/
+    # environment:
+      # - PORT=8080
+      # - USE_AWS_CREDS=true
+      # - MISTY_ENV_NAME=dev
+      # - AWS_DEFAULT_REGION=us-east-1
+      # - CACHE_HOSTNAME=192.168.56.101
+    # links:
+      # - cache
+  # cache:
+    # image: memcached
+    # ports:
+      # - "11211:11211"
+  cache:
+    image: redis
     ports:
-      - "8080:8080"
-    volumes:
-      - /home/krogebry/.aws:/root/.aws
-    environment:
-      - PORT=8080
-      - USE_AWS_CREDS=true
-      - MISTY_ENV_NAME=dev
-      - AWS_DEFAULT_REGION=us-east-1
+      - "6379:6379"
